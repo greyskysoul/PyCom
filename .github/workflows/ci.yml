@@ -47,6 +47,8 @@ jobs:
             artifact: pycom-windows
           - os: ubuntu-latest
             artifact: pycom-linux
+          - os: ubuntu-22.04-arm
+            artifact: pycom-linux-arm64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
