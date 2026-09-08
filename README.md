@@ -19,6 +19,24 @@ Built for embedded firmware flashing (STM32 &amp; other ymodem bootloaders) and 
   <a href="https://github.com/greyskysoul/pycom/stargazers"><img src="https://img.shields.io/github/stars/greyskysoul/pycom?style=social" alt="GitHub stars"></a>
 </p>
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/main.svg" alt="Main terminal" width="75%">
+  <br><sub>Main terminal — device ANSI/VT output with scrollback and live TX/RX counters</sub>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/hex.svg" alt="HEX mode with ASCII pane" width="75%">
+  <br><sub>HEX mode — hex bytes on the left, printable ASCII (grey dots for the rest) in the right-hand pane</sub>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/menu.svg" alt="Main menu popup" width="45%">
+  <img src="docs/screenshots/options.svg" alt="Options screen" width="45%">
+  <br><sub>Ctrl+A menu popup and the options screen</sub>
+</p>
+
 ## Features
 
 - **Full-screen terminal UI** — device ANSI/VT output is rendered correctly, with scrollable history.

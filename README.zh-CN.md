@@ -19,6 +19,24 @@
   <a href="https://github.com/greyskysoul/pycom/stargazers"><img src="https://img.shields.io/github/stars/greyskysoul/pycom?style=social" alt="GitHub stars"></a>
 </p>
 
+## 界面预览
+
+<p align="center">
+  <img src="docs/screenshots/main.svg" alt="主界面" width="75%">
+  <br><sub>主界面 — 设备 ANSI/VT 输出、滚动回看与实时 TX/RX 计数</sub>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/hex.svg" alt="HEX 模式（右侧 ASCII 分栏）" width="75%">
+  <br><sub>HEX 模式 — 左侧十六进制字节，右侧分栏显示可打印 ASCII（其余为灰色圆点）</sub>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/menu.svg" alt="功能菜单弹层" width="45%">
+  <img src="docs/screenshots/options.svg" alt="选项设置" width="45%">
+  <br><sub>Ctrl+A 功能菜单弹层与选项设置</sub>
+</p>
+
 ## 特性
 
 - **全屏终端界面**：设备 ANSI/VT 输出正确渲染、可滚动回看。
