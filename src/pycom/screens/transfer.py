@@ -157,7 +157,10 @@ class SendScreen(_TransferScreen):
             return
         self._start(True)
         self._update_state(
-            tr("发送 {file} — 等待设备进入接收状态 (先在对端启动接收)…", file=os.path.basename(path))
+            tr(
+                "发送 {file} — 等待设备进入接收状态 (先在对端启动接收)…",
+                file=os.path.basename(path),
+            )
         )
 
 

@@ -553,9 +553,7 @@ class PyComApp(App):
                 self._hex_row_bytes = 0  # 重新进入 HEX 模式：从头开始计行
                 self.query_one("#term-root").mount(_HexBar(id="hex-bar"), before="#bottom")
                 # 右侧 ASCII 分栏：随 HEX 模式挂载/卸载
-                self.query_one("#term-area").mount(
-                    HexAsciiPane(self._view(), id="hex-ascii-pane")
-                )
+                self.query_one("#term-area").mount(HexAsciiPane(self._view(), id="hex-ascii-pane"))
         else:
             if present:
                 with contextlib.suppress(Exception):
@@ -799,9 +797,7 @@ class PyComApp(App):
         self._status().update(self._prefix_hint())
 
     def _prefix_hint(self) -> str:
-        items = " / ".join(
-            f"{key.upper()} {tr(label)}" for key, label in _PREFIX_FUNCS.items()
-        )
+        items = " / ".join(f"{key.upper()} {tr(label)}" for key, label in _PREFIX_FUNCS.items())
         return tr("前缀模式: {items} / Esc 取消", items=items)
 
     def _cancel_prefix(self) -> None:
@@ -1156,7 +1152,9 @@ class PyComApp(App):
             try:
                 return open(path, "wb")
             except OSError as exc:
-                self._xfer_emit("show_result", False, tr("无法写入 {path}: {err}", path=path, err=exc))
+                self._xfer_emit(
+                    "show_result", False, tr("无法写入 {path}: {err}", path=path, err=exc)
+                )
                 return None
 
         try:
@@ -1214,7 +1212,9 @@ def _parse_args(argv):
     conn.add_argument("--data-bits", type=int, metavar="5-8", default=None, help=tr("数据位"))
     conn.add_argument("--parity", metavar="N/E/O", default=None, help=tr("校验位"))
     conn.add_argument("--stop-bits", type=float, metavar="1|1.5|2", default=None, help=tr("停止位"))
-    conn.add_argument("--flow", metavar="MODE", default=None, help=tr("流控：none / rtscts / xonxoff"))
+    conn.add_argument(
+        "--flow", metavar="MODE", default=None, help=tr("流控：none / rtscts / xonxoff")
+    )
 
     startup = parser.add_argument_group(tr("启动动作"))
     startup.add_argument(

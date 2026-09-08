@@ -411,7 +411,9 @@ class ZModemEngine:
 
         # 4) ZEOF
         self._write(
-            hex_header(ZEOF, total & 0xFF, (total >> 8) & 0xFF, (total >> 16) & 0xFF, (total >> 24) & 0xFF)
+            hex_header(
+                ZEOF, total & 0xFF, (total >> 8) & 0xFF, (total >> 16) & 0xFF, (total >> 24) & 0xFF
+            )
         )
 
         # 5) finish handshake

@@ -21,7 +21,9 @@ class AboutScreen(ResponsiveCompact):
     def _body(self) -> str:
         lines = [
             f"PyCom {__version__}",
-            tr("跨平台串口终端，支持 YMODEM / ZMODEM 文件传输、16 进制模式、会话捕获与 VT/ANSI 渲染。"),
+            tr(
+                "跨平台串口终端，支持 YMODEM / ZMODEM 文件传输、16 进制模式、会话捕获与 VT/ANSI 渲染。"
+            ),
             "",
             tr("作者: {author}", author=PROJECT_AUTHOR),
             tr("项目主页: {url}", url=PROJECT_URL),

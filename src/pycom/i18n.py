@@ -74,7 +74,7 @@ _EN: dict[str, str] = {
         "HEX receive/send.\n"
         "Run without arguments to open the interactive UI (Ctrl+A opens the menu)."
     ),
-    "示例：\n  pycom -p COM3 -b 115200\n  pycom -p COM3 -s \"AT\\r\"\n  pycom -p COM3 -f boot.txt -e 5\n  pycom -p COM3 --hex\n  pycom --bare -p COM3 -b 115200   # 无界面纯直通：stdin→串口，串口→stdout\n\n-s/-f 内容支持 \\n \\r \\t \\xHH 等转义；-e 支持小数秒。--bare 隐藏全部界面，仅供外部进程（如 AI agent）通过标准输入输出驱动。": (
+    '示例：\n  pycom -p COM3 -b 115200\n  pycom -p COM3 -s "AT\\r"\n  pycom -p COM3 -f boot.txt -e 5\n  pycom -p COM3 --hex\n  pycom --bare -p COM3 -b 115200   # 无界面纯直通：stdin→串口，串口→stdout\n\n-s/-f 内容支持 \\n \\r \\t \\xHH 等转义；-e 支持小数秒。--bare 隐藏全部界面，仅供外部进程（如 AI agent）通过标准输入输出驱动。': (
         "Examples:\n"
         "  pycom -p COM3 -b 115200\n"
         '  pycom -p COM3 -s "AT\\r"\n'
