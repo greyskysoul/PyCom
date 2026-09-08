@@ -15,6 +15,9 @@ venv/
 .coverage
 htmlcov/
 
+# Build intermediate artifacts
+wheelhouse/
+
 # IDE / OS
 .idea/
 .vscode/

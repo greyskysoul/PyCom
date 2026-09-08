@@ -39,3 +39,8 @@ class AboutScreen(ResponsiveCompact):
     def on_mount(self) -> None:
         super().on_mount()
         self.query_one("#menu-back", Button).focus()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "menu-back":
+            event.stop()
+            self.dismiss(None)

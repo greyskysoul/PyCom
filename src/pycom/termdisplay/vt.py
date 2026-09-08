@@ -16,7 +16,7 @@ from collections import deque
 from collections.abc import Callable, Sequence
 
 import pyte
-from pyte.screens import Char, Margins
+from pyte.screens import Char, Margins, StaticDefaultDict
 
 DEFAULT_SCROLLBACK = 4000
 _DEFAULT_CODECS = ("utf-8", "gbk", "latin-1")
@@ -93,15 +93,75 @@ class TerminalModel:
 
     # -- sizing -------------------------------------------------------------------------
     def resize(self, columns: int, lines: int) -> None:
-        """Recreate the screen at the new size (display is cleared, history kept)."""
-        if columns < 1:
-            columns = 1
-        if lines < 1:
-            lines = 1
+        """Resize the terminal, preserving both visible content and scrollback.
+
+        The old implementation rebuilt the screen from scratch, which blanked
+        the visible area (and the freshly-arrived rows at the bottom with it),
+        so resizing the terminal appeared to wipe out the whole history.
+
+        Height shrink is done by hand rather than via pyte's ``Screen.resize``:
+        pyte's ``delete_lines`` only moves rows that already exist in its
+        (sparse) buffer, so on a screen with blank rows below, the top row never
+        actually scrolls off — it would end up both in the scrollback and still
+        visible, and get captured again on the next shrink (duplicated history).
+        Here we capture the top rows into the scrollback first, then shift the
+        remaining rows up ourselves.  Width changes just clip the captured
+        history and the live rows.  The stream keeps referencing the same screen
+        object, so it stays valid without being rebuilt.
+        """
+        columns = max(1, columns)
+        lines = max(1, lines)
+        old_columns, old_lines = self.columns, self.lines
+        screen = self._screen
+
+        if lines < old_lines:
+            # Rows that would be clipped off the top of a shorter screen move
+            # into the scrollback instead of being dropped.
+            dropped = old_lines - lines
+            for y in range(dropped):
+                top_row = screen.snapshot_row(y)
+                if top_row and not _row_is_blank(top_row):
+                    self._history.append(top_row)
+            # Shift the surviving rows up by ``dropped`` and drop the rest.
+            buffer = screen.buffer
+            survivors: dict[int, StaticDefaultDict[int, Char]] = {
+                y: buffer[y] for y in range(dropped, old_lines) if y in buffer
+            }
+            buffer.clear()
+            for y, saved_row in survivors.items():
+                buffer[y - dropped] = saved_row
+
         self.columns = columns
         self.lines = lines
-        self._screen = _CaptureScreen(columns, lines, self._on_scroll_out)
-        self._stream = pyte.Stream(self._screen)
+
+        if columns < old_columns:
+            # Never let captured rows overflow a narrower window.
+            for hist_row in self._history:
+                del hist_row[columns:]
+            # Clip the live screen rows to the new width as well.
+            for live_row in screen.buffer.values():
+                for x in range(columns, old_columns):
+                    live_row.pop(x, None)
+
+        # Synchronise the pyte screen object with the new size (the buffer was
+        # already handled above, so this only updates bookkeeping).
+        screen.lines = lines
+        screen.columns = columns
+        screen.set_margins()
+        if columns < old_columns and screen.cursor.x >= columns:
+            # 变窄：把光标夹到新宽度内。
+            screen.cursor.x = columns - 1
+        if lines < old_lines:
+            # 变矮时内容整体上移了 ``dropped`` 行，光标也要跟着上移，
+            # 否则光标会停留在内容下方的空白处（相对内容看起来“下移”了）。
+            if screen.cursor.y >= dropped:
+                screen.cursor.y -= dropped
+            else:
+                # 光标原本指向的行已被滚入历史：放到新屏幕顶部。
+                screen.cursor.y = 0
+        elif screen.cursor.y >= lines:
+            screen.cursor.y = lines - 1
+        screen.dirty.update(range(lines))
 
     # -- input --------------------------------------------------------------------------
     def feed_bytes(self, data: bytes) -> None:

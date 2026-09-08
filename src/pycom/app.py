@@ -36,13 +36,13 @@ from pycom.keys import (
 from pycom.screens.about import AboutScreen
 from pycom.screens.base import ConfirmDialog
 from pycom.screens.connection import ConnectionScreen
-from pycom.screens.help import MainMenuScreen
 from pycom.screens.language import LanguageScreen
+from pycom.screens.menu_popup import MainMenuPopup
 from pycom.screens.options import OptionsScreen
 from pycom.screens.transfer import RecvScreen, SendScreen
 from pycom.screens.transfermenu import TransferMenuScreen
 from pycom.serialio import SerialManager
-from pycom.termdisplay.view import StatusBar, TerminalView
+from pycom.termdisplay.view import HexAsciiPane, StatusBar, TerminalView
 from pycom.termdisplay.vt import TerminalModel
 from pycom.xfer.ymodem import YModemEngine
 from pycom.xfer.zmodem import ZModemEngine
@@ -108,6 +108,9 @@ class _HexArea(TextArea):
         b
         for b in TextArea.BINDINGS
         if not (isinstance(b, Binding) and "ctrl+a" in b.key.split(","))
+    ] + [
+        # 在 16 进制输入框内按回车直接发送（替代插入换行）
+        Binding("enter", "send_hex", show=False, priority=True),
     ]
 
     def __init__(self, **kwargs) -> None:
@@ -115,6 +118,10 @@ class _HexArea(TextArea):
         super().__init__(**kwargs)
         self._reformatting = False
         self.cursor_blink = False  # 常亮的块状光标，不闪烁
+
+    def action_send_hex(self) -> None:
+        """回车直接发送：解析输入框内容并发送到串口。"""
+        self.app._send_hex_box()  # type: ignore[attr-defined]
 
     def on_text_area_changed(self, _event: TextArea.Changed) -> None:
         self._reflow(keep_cursor=True)
@@ -260,6 +267,13 @@ class PyComApp(App):
         Binding("ctrl+c", "noop", show=False, system=True),
     ]
 
+    # 应用内选中（Textual 自带）+ Ctrl+Shift+C/V 快捷键复制粘贴。
+    # 注意：本应用必须向终端上报鼠标（滚动/按钮），而终端一旦处于鼠标上报
+    # 状态就会关闭自身的原生选中；因此普通拖拽产生的是 Textual 的“应用内”
+    # 选中，复制用 Ctrl+Shift+C。在 Windows Terminal 中要原生选中需按住
+    # Shift 拖拽，再用终端自己的 Ctrl+Shift+C / 右键复制。
+    ALLOW_SELECT: ClassVar[bool] = True
+
     def __init__(
         self,
         cfg: AppConfig | None = None,
@@ -299,7 +313,7 @@ class PyComApp(App):
         self._startup_thread: threading.Thread | None = None
         self._loopback = False  # virtual echo device (no real port)
         # HEX 接收显示：当前显示行已排的字节数（跨接收块持续计数，用于按
-        # 窗口宽度在 4/8/16/32 字节处连续换行）
+        # 窗口宽度在 4/8/16 字节处连续换行）
         self._hex_row_bytes = 0
 
         # 启动/连接时打印到终端的本地提示（橙/粗体），布局稳定后统一刷出
@@ -324,7 +338,8 @@ class PyComApp(App):
     # ====================================================================== compose
     def compose(self):
         with Container(id="term-root"):
-            yield TerminalView(self.model, id="term")
+            with Horizontal(id="term-area"):
+                yield TerminalView(self.model, id="term")
             with Horizontal(id="bottom"):
                 # “菜单”按钮在左下角；状态文字占满其余宽度
                 yield _StatusMenuButton(tr("菜单"), id="menu-btn")
@@ -370,6 +385,8 @@ class PyComApp(App):
 
     def _bootstrap(self) -> None:
         self._view().focus()
+        # 终端滚动时同步刷新右侧 ASCII 分栏
+        self._view().on_scroll = self._refresh_hex_pane
         self.apply_config()
         # 程序一启动就打印菜单快捷键提示（无论是否连接端口）
         self._print_startup_hint()
@@ -421,6 +438,11 @@ class PyComApp(App):
     # ======================================================================= helpers
     def _view(self) -> TerminalView:
         return self.query_one("#term", TerminalView)
+
+    def _refresh_hex_pane(self) -> None:
+        """Repaint the right-hand ASCII pane (present only in HEX mode)."""
+        with contextlib.suppress(Exception):
+            self.query_one("#hex-ascii-pane", HexAsciiPane).refresh()
 
     def _status(self) -> StatusBar:
         return self.query_one("#status", StatusBar)
@@ -521,7 +543,8 @@ class PyComApp(App):
         return self.query_one("#hex-bar", Vertical)
 
     def _sync_hex_ui(self) -> None:
-        """Mount the hex input row only while HEX mode is on; remove it when off.
+        """Mount the hex input row + ASCII pane only while HEX mode is on;
+        remove them when off.
         (A permanently hidden focusable row used to steal focus and break
         Ctrl+A / other combos in the normal mode.)"""
         present = len(self.query("#hex-bar")) > 0
@@ -529,15 +552,22 @@ class PyComApp(App):
             if not present:
                 self._hex_row_bytes = 0  # 重新进入 HEX 模式：从头开始计行
                 self.query_one("#term-root").mount(_HexBar(id="hex-bar"), before="#bottom")
-        elif present:
-            with contextlib.suppress(Exception):
-                self.query_one("#hex-bar", Vertical).remove()
+                # 右侧 ASCII 分栏：随 HEX 模式挂载/卸载
+                self.query_one("#term-area").mount(
+                    HexAsciiPane(self._view(), id="hex-ascii-pane")
+                )
+        else:
+            if present:
+                with contextlib.suppress(Exception):
+                    self.query_one("#hex-bar", Vertical).remove()
+                with contextlib.suppress(Exception):
+                    self.query_one("#hex-ascii-pane").remove()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         button_id = event.button.id
         if button_id == "menu-btn":
             event.stop()
-            self.push_screen(MainMenuScreen())
+            self._open_menu()
             return
         if button_id != "hex-send":
             return
@@ -621,13 +651,18 @@ class PyComApp(App):
         else:
             self.model.feed_bytes(data)
         self._view().mark_dirty()
+        self._refresh_hex_pane()
 
     def _hex_rx_per_line(self) -> int:
-        """每行多少字节随终端显示宽度自适应（32/16/8/4）。"""
+        """每行多少字节随终端显示宽度自适应（32/16/8/4）。
+
+        接收区只显示纯十六进制文本（右侧的 ASCII 列由独立的分栏显示），
+        每行最多 32 字节，以匹配分栏的固定宽度。
+        """
         return hex_bytes_per_line(max(1, self.model.columns), max_bytes=32)
 
     def _format_hex_rx(self, data: bytes) -> str:
-        """把一段接收数据排版为“每行 N 字节”的十六进制文本。
+        """把一段接收数据排版为“每行 N 字节”的纯十六进制文本。
 
         发送区(输入框)之所以能连续按宽度换行，是因为它每次把整篇文本重排；
         而接收数据是分块到达的，若只在单个块内分组，小于 N 字节的小块会一直
@@ -681,7 +716,9 @@ class PyComApp(App):
             event.stop()
             self._enter_prefix()
             return
-        # 复制 / 粘贴（Ctrl+Shift+C / Ctrl+Shift+V）
+        # 复制 / 粘贴（Ctrl+Shift+C / Ctrl+Shift+V）：复制的是 Textual 的“应用内”
+        # 选中；在 Windows Terminal 中这两个键会被终端自身截走，需按住 Shift
+        # 拖拽做原生选中后用终端的复制。
         if event.key == "ctrl+shift+c":
             event.stop()
             self._copy_selection()
@@ -713,7 +750,13 @@ class PyComApp(App):
 
     # -- 复制 / 粘贴 ----------------------------------------------------------------
     def _copy_selection(self) -> None:
-        """复制终端中选中的文本到剪贴板（Ctrl+Shift+C）。"""
+        """复制终端中选中的文本到剪贴板（Ctrl+Shift+C）。
+
+        选中的是 Textual 的“应用内”选中：宿主终端在鼠标上报期间关闭了原生
+        选中，普通拖拽只能生成应用内高亮；复制统一走这里的快捷键。在 Windows
+        Terminal 中 Ctrl+Shift+C 被终端截走，需按住 Shift 拖拽原生选中后用
+        终端的复制。
+        """
         text = self.screen.get_selected_text()
         if text:
             self.copy_to_clipboard(text)
@@ -781,11 +824,17 @@ class PyComApp(App):
             self.send_bytes(data)
         self._refresh_status()
 
+    def _open_menu(self) -> None:
+        """Open the floating main-menu popup anchored at the bottom-left."""
+        if self.query("#menu-popup"):
+            return  # already open
+        self.screen.mount(MainMenuPopup(self.menu_action))
+
     # ======================================================================== actions
     def menu_action(self, code: str) -> None:
-        """Dispatch a single-letter menu action (also from the main-menu overlay)."""
+        """Dispatch a single-letter menu action (also from the main-menu popup)."""
         if code == "z":
-            self.push_screen(MainMenuScreen())
+            self._open_menu()
         elif code == "p":
             self.push_screen(ConnectionScreen())
         elif code == "d":
@@ -870,6 +919,7 @@ class PyComApp(App):
         self._rx = 0
         self._hex_row_bytes = 0  # 清屏后 HEX 行计数从头开始
         self._view().mark_dirty()
+        self._refresh_hex_pane()
         self._refresh_status()
 
     # =========================================================================== config
@@ -880,6 +930,7 @@ class PyComApp(App):
         self.model.rx_add_lf = self.cfg.rx_add_lf
         self._view().mark_dirty()
         self._sync_hex_ui()
+        self._refresh_hex_pane()
         self._refresh_status()
 
     # ============================================================================ status

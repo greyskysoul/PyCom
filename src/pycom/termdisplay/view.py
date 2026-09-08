@@ -138,6 +138,7 @@ class TerminalView(Static):
         self._offset = 0  # rows scrolled back from the bottom
         self._auto_scroll = True
         self._active = True  # this view is the active typing target
+        self.on_scroll: object | None = None  # optional callback after a scroll
 
     @property
     def active(self) -> bool:
@@ -196,6 +197,8 @@ class TerminalView(Static):
             if self._offset == 0:
                 self._auto_scroll = True
         self.refresh()
+        if callable(self.on_scroll):
+            self.on_scroll()
 
     def on_mouse_scroll_up(self, event: MouseScrollUp) -> None:
         event.stop()
@@ -206,6 +209,28 @@ class TerminalView(Static):
         self._wheel(up=False)
 
     # -- rendering -------------------------------------------------------------------------
+    def _current_rows(self) -> list[list[Char]]:
+        """The model rows currently on screen (history tail + screen), top to
+        bottom, honouring the scroll offset — exactly what :meth:`render` draws.
+        Shared with :class:`HexAsciiPane` so the ASCII column stays aligned."""
+        h = max(1, self.size.height)
+        model = self.model
+        if self._auto_scroll:
+            self._offset = 0
+        total = model.total_rows()
+        history = model.history_rows()
+        screen = model.screen_rows()
+        if total <= h:
+            pad = max(0, h - total)
+            return [list() for _ in range(pad)] + screen
+        end = total - self._offset
+        start = max(0, end - h)
+        all_rows = history + screen
+        rows = all_rows[start:end]
+        if len(rows) < h:
+            rows = [list() for _ in range(h - len(rows))] + rows
+        return rows
+
     def render(self) -> Text:
         """Build the visible block from the model (called by Textual on repaint).
 
@@ -220,17 +245,14 @@ class TerminalView(Static):
         screen = model.screen_rows()
         cursor_row, cursor_col = model.cursor_position()
 
+        rows = [render_row(r) for r in self._current_rows()]
+
         if total <= h:
             pad = max(0, h - total)
-            rows: list[Text] = [Text("")] * pad + [render_row(r) for r in screen]
             cursor_disp = pad + cursor_row
         else:
             end = total - self._offset
             start = max(0, end - h)
-            all_rows = history + screen
-            rows = [render_row(r) for r in all_rows[start:end]]
-            if len(rows) < h:
-                rows = [Text("")] * (h - len(rows)) + rows
             cursor_disp = len(history) + cursor_row - start
 
         if 0 <= cursor_disp < len(rows):
@@ -247,6 +269,54 @@ class TerminalView(Static):
                 block.append("\n")
             block.append_text(line)
         return block
+
+
+class HexAsciiPane(Static):
+    """Right-hand column in HEX mode that shows the printable ASCII characters
+    corresponding to the hex bytes currently visible in the terminal.
+
+    It mirrors the exact rows the :class:`TerminalView` is showing (same scroll
+    offset), parses each row's hex tokens, and renders one ASCII character per
+    byte — visible ASCII (``0x20``-``0x7e``) as the character, everything else
+    as a grey dot.  Non-hex / blank rows render empty so the two columns always
+    stay in sync.
+    """
+
+    GRAY = Style(color="#787878")
+
+    def __init__(self, term_view: TerminalView, id: str | None = None) -> None:
+        super().__init__("", id=id)
+        self._term = term_view
+
+    def render(self) -> Text:
+        text = Text()
+        for i, chars in enumerate(self._term._current_rows()):
+            if i:
+                text.append("\n")
+            text.append_text(self._ascii_row(chars))
+        return text
+
+    def _ascii_row(self, chars: list[Char]) -> Text:
+        line = "".join(c.data for c in chars).rstrip()
+        tokens = line.split()
+        out = Text()
+        for tok in tokens:
+            if len(tok) != 2 or any(c not in "0123456789abcdefABCDEF" for c in tok):
+                return Text("")  # not a clean hex line -> leave the row blank
+            b = int(tok, 16)
+            if 0x20 <= b <= 0x7E:
+                out.append(chr(b))
+            else:
+                out.append(".", style=self.GRAY)
+        return out
+
+    def on_mouse_scroll_up(self, event: MouseScrollUp) -> None:
+        event.stop()
+        self._term._wheel(up=True)
+
+    def on_mouse_scroll_down(self, event: MouseScrollDown) -> None:
+        event.stop()
+        self._term._wheel(up=False)
 
 
 class StatusBar(Static):

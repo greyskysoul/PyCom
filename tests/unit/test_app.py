@@ -32,12 +32,12 @@ async def test_ctrl_a_prefix_opens_menu():
         await pilot.press("ctrl+a")
         await pilot.press("z")
         await pilot.pause()
-        assert len(app.screen_stack) == 2, "main menu should be pushed"
-        assert app.screen_stack[-1].__class__.__name__ == "MainMenuScreen"
+        assert len(app.screen_stack) == 1, "popup must not push a new screen"
+        assert len(app.query("#menu-popup")) == 1, "main-menu popup should be shown"
 
         await pilot.press("escape")
         await pilot.pause()
-        assert len(app.screen_stack) == 1
+        assert len(app.query("#menu-popup")) == 0, "escape should close the popup"
 
 
 async def test_prefix_cancel_with_escape():
@@ -218,13 +218,13 @@ async def test_dropdown_arrows_navigate_and_enter_selects_value():
 
 async def test_help_menu_arrows_select_and_enter_runs():
     """Main menu rows are selectable: arrows move, Enter runs the item."""
-    from pycom.screens.help import MainMenuScreen
     from pycom.screens.options import OptionsScreen
 
     app = PyComApp()
     async with app.run_test(size=(100, 30)) as pilot:
         await pilot.pause()
-        app.push_screen(MainMenuScreen())
+        await pilot.press("ctrl+a")
+        await pilot.press("z")
         await pilot.pause(0.2)
         assert app.focused.id == "menu-p", "first menu item should be focused"
 
@@ -233,7 +233,7 @@ async def test_help_menu_arrows_select_and_enter_runs():
             await pilot.press("down")
             await pilot.pause(0.02)
         await pilot.press("enter")
-        await pilot.pause(0.2)
+        await pilot.pause(0.3)
 
         assert len(app.screen_stack) == 2
         assert isinstance(app.screen_stack[-1], OptionsScreen)
@@ -241,16 +241,16 @@ async def test_help_menu_arrows_select_and_enter_runs():
 
 async def test_help_menu_letter_key_still_runs():
     """Pressing the function letter on the main menu runs it immediately."""
-    from pycom.screens.help import MainMenuScreen
     from pycom.screens.options import OptionsScreen
 
     app = PyComApp()
     async with app.run_test(size=(100, 30)) as pilot:
         await pilot.pause()
-        app.push_screen(MainMenuScreen())
+        await pilot.press("ctrl+a")
+        await pilot.press("z")
         await pilot.pause(0.2)
         await pilot.press("o")
-        await pilot.pause(0.2)
+        await pilot.pause(0.3)
         assert len(app.screen_stack) == 2
         assert isinstance(app.screen_stack[-1], OptionsScreen)
 
@@ -453,9 +453,10 @@ async def test_hex_menu_toggle_mounts_and_removes_bar():
         await pilot.press("ctrl+a")
         await pilot.press("z")
         await pilot.pause(0.2)
-        assert len(app.screen_stack) == 2
+        assert len(app.query("#menu-popup")) == 1
         await pilot.press("escape")
         await pilot.pause(0.1)
+        assert len(app.query("#menu-popup")) == 0
 
         # toggling off removes the bar again -> normal DOM restored
         await pilot.press("ctrl+a")
@@ -575,6 +576,51 @@ async def test_hex_receive_wraps_across_small_chunks():
         assert nonempty[1] == nonempty[1].lstrip()
 
 
+async def test_hex_receive_ascii_pane():
+    """The separate right-hand pane shows the printable ASCII for the visible
+    hex rows: visible ASCII as the character, control/extended bytes as a grey
+    dot."""
+    from pycom.config import AppConfig
+
+    app = PyComApp(cfg=AppConfig(hex_mode=True))
+    async with app.run_test(size=(100, 28)) as pilot:
+        await pilot.pause()
+        per_line = hex_bytes_per_line(max(1, app.model.columns), max_bytes=32)
+        row = b"A\x00B\x80" + bytes([0x63]) * (per_line - 4)
+        app._rx_to_terminal(row)
+        await pilot.pause(0.3)
+
+        pane = app.query_one("#hex-ascii-pane")
+        rt = pane.render()
+        # 一满行：A . B . cccc...
+        assert rt.plain.strip() == "A.B." + "c" * (per_line - 4)
+        # 灰色圆点带样式，可打印字符保持默认
+        gray_spans = [s for s in rt.spans if s.style and s.style.color]
+        assert len(gray_spans) >= 2
+
+
+async def test_hex_receive_ascii_updates_in_real_time():
+    """未满一行的尾部行，其 ASCII 字符也会随字节到达在分栏里实时补全。"""
+    from pycom.config import AppConfig
+
+    app = PyComApp(cfg=AppConfig(hex_mode=True))
+    async with app.run_test(size=(100, 28)) as pilot:
+        await pilot.pause()
+        pane = app.query_one("#hex-ascii-pane")
+
+        # 只有 2 字节（未满一行）：分栏立即显示 "AB"
+        app._rx_to_terminal(b"AB")
+        await pilot.pause(0.3)
+        pane.refresh()
+        assert pane.render().plain.strip() == "AB"
+
+        # 再补 2 字节：分栏实时补全为 "AB.C"
+        app._rx_to_terminal(b"\x00C")
+        await pilot.pause(0.3)
+        pane.refresh()
+        assert pane.render().plain.strip() == "AB.C"
+
+
 async def test_hex_send_button_transmits_bytes():
     app = PyComApp()
     sent: list[bytes] = []
@@ -606,6 +652,45 @@ async def test_hex_send_button_transmits_bytes():
         await pilot.pause(0.05)
         app._send_hex_box()
         assert sent == [b"\xaa\x0d\x7f", b"\xaa\x0d\x7f"]
+        assert any("输入字节" in n for n in notes)
+
+
+async def test_hex_enter_in_input_sends_bytes():
+    """HEX 输入框内按回车直接发送，而不是插入换行；发送后内容保留。"""
+    app = PyComApp()
+    sent: list[bytes] = []
+    notes: list[str] = []
+
+    async with app.run_test(size=(100, 28)) as pilot:
+        app.notify = lambda message, *a, **k: notes.append(str(message))  # type: ignore[method-assign]
+        app.is_connected = lambda: True  # type: ignore[method-assign]
+        app.serial.write = lambda data: sent.append(bytes(data))  # type: ignore[method-assign]
+        await pilot.pause()
+
+        await pilot.press("ctrl+a")
+        await pilot.press("h")
+        await pilot.pause(0.2)
+        assert app.cfg.hex_mode is True
+        assert app.focused.id == "hex-input"  # 快捷键开启后自动聚焦输入框
+
+        # 逐键输入字节，回车即发送
+        for ch in ("A", "A", " ", "0", "D"):
+            await pilot.press(ch)
+            await pilot.pause(0.02)
+        await pilot.press("enter")
+        await pilot.pause(0.2)
+        assert sent == [b"\xaa\x0d"]
+        # 回车不会在输入框里插入换行
+        assert "\n" not in app.query_one("#hex-input").text
+        # 发送后焦点仍留在输入框、内容保留，可继续输入
+        assert app.focused.id == "hex-input"
+
+        # 输入框为空时回车：不发送、弹出提醒
+        app.query_one("#hex-input").text = ""
+        await pilot.pause(0.05)
+        await pilot.press("enter")
+        await pilot.pause(0.2)
+        assert sent == [b"\xaa\x0d"]
         assert any("输入字节" in n for n in notes)
 
 
@@ -1120,20 +1205,25 @@ async def test_compact_controls_start_at_the_same_column():
         assert len(set(widths)) == 1, f"控件宽度不一致: {widths}"
 
 
-async def test_main_menu_compact_threshold_is_30_rows():
-    """功能菜单（含 about 两行与左下“返回”按钮）富布局在高度 <30 时自动切换
-    为简洁模式（30 行及以上保持富布局）。"""
-    from pycom.screens.help import MainMenuScreen
-
+async def test_main_menu_popup_usable_on_small_window():
+    """功能菜单改为弹出式后，在小窗口下弹层也应完整可用：所有条目都能用
+    方向键到达，Esc 可关闭。"""
     app = PyComApp()
-    async with app.run_test(size=(100, 29)) as pilot:
+    async with app.run_test(size=(40, 12)) as pilot:
         await pilot.pause(0.2)
-        app.push_screen(MainMenuScreen())
+        await pilot.press("ctrl+a")
+        await pilot.press("z")
         await pilot.pause(0.3)
-        assert app.screen_stack[-1].query_one("#help-box").has_class("compact") is True
-        await pilot.resize_terminal(100, 30)
-        await pilot.pause(0.3)
-        assert app.screen_stack[-1].query_one("#help-box").has_class("compact") is False
+        assert len(app.query("#menu-popup")) == 1
+        assert app.focused.id == "menu-p"
+        # 遍历到最后一项
+        for _ in range(8):
+            await pilot.press("down")
+            await pilot.pause(0.02)
+        assert app.focused.id == "menu-x"
+        await pilot.press("escape")
+        await pilot.pause(0.2)
+        assert len(app.query("#menu-popup")) == 0
 
 
 async def test_notifications_cleared_by_any_key():
@@ -1172,8 +1262,6 @@ async def test_toast_renders_at_bottom_left():
 async def test_main_screen_menu_button_bottom_left_opens_menu():
     """主界面左下角的“菜单”按钮；点击打开同一功能菜单，
     且按钮不抢占键盘焦点（can_focus=False）。"""
-    from pycom.screens.help import MainMenuScreen
-
     app = PyComApp()
     async with app.run_test(size=(100, 28)) as pilot:
         await pilot.pause(0.2)
@@ -1188,11 +1276,10 @@ async def test_main_screen_menu_button_bottom_left_opens_menu():
         # 状态栏不再重复显示“Ctrl+A Z”文字提示（交给按钮 + 启动首行提示）
         assert "Ctrl+A Z" not in app._status_text()
 
-        # 点击打开主菜单（与 Ctrl+A Z 等价）
+        # 点击打开主菜单（与 Ctrl+A Z 等价，弹出式弹层）
         await pilot.click("#menu-btn")
         await pilot.pause(0.3)
-        assert len(app.screen_stack) == 2
-        assert isinstance(app.screen_stack[-1], MainMenuScreen)
+        assert len(app.query("#menu-popup")) == 1, "菜单按钮应打开主菜单弹层"
 
 
 async def test_startup_hint_shown_without_connection():
@@ -1312,22 +1399,22 @@ async def test_main_menu_shows_about_and_clean_copy():
     """功能菜单条目去掉冗余括号说明；关于信息移入“关于”页面。"""
     from pycom import PROJECT_AUTHOR, PROJECT_URL, __version__
     from pycom.screens.about import AboutScreen
-    from pycom.screens.help import MainMenuScreen
 
     app = PyComApp()
     async with app.run_test(size=(100, 30)) as pilot:
         await pilot.pause()
-        app.push_screen(MainMenuScreen())
+        await pilot.press("ctrl+a")
+        await pilot.press("z")
         await pilot.pause(0.2)
-        scr = app.screen_stack[-1]
+        popup = app.query_one("#menu-popup")
         # 关于信息不再停留在主菜单底部（已移入关于页）
-        assert len(scr.query("#help-about")) == 0
-        assert len(scr.query("#help-repo")) == 0
+        assert len(popup.query("#help-about")) == 0
+        assert len(popup.query("#help-repo")) == 0
         # 主菜单不再包含“主菜单”自引用项（z 已移除）
-        assert len(scr.query("#menu-z")) == 0
+        assert len(popup.query("#menu-z")) == 0
         # 所有主菜单条目不含冗余括号说明
         for key in ("p", "d", "c", "h", "l", "o", "y", "a", "x"):
-            label = str(scr.query_one(f"#menu-{key}").render())
+            label = str(popup.query_one(f"#menu-{key}").render())
             assert "（" not in label and "(" not in label and ")" not in label
 
         # 关于页面承载项目信息（版本/作者/主页/协议）
@@ -1339,27 +1426,21 @@ async def test_main_menu_shows_about_and_clean_copy():
 
 
 async def test_main_menu_back_button_bottom_left_closes():
-    """菜单页面左下角有“返回”按钮，点击后回到主界面。"""
-    from pycom.screens.help import MainMenuScreen
+    """关于页面左下角有“返回”按钮，点击后回到主界面。"""
+    from pycom.screens.about import AboutScreen
 
     app = PyComApp()
     async with app.run_test(size=(100, 30)) as pilot:
         await pilot.pause()
-        app.push_screen(MainMenuScreen())
+        app.push_screen(AboutScreen())
         await pilot.pause(0.2)
         scr = app.screen_stack[-1]
         back = scr.query_one("#menu-back")
         assert "返回" in str(back.render())
-        box = scr.query_one("#help-box")
-        footer = scr.query_one("#help-footer")
-        # 位于菜单框底部、与底部文案同一左缘（左下角）
-        assert back.region.y >= footer.region.y
-        assert back.region.x == footer.region.x
-        assert back.region.right <= box.region.right
 
         await pilot.click("#menu-back")
         await pilot.pause(0.3)
-        assert len(app.screen_stack) == 1, "返回应关闭功能菜单"
+        assert len(app.screen_stack) == 1, "返回应关闭关于页面"
 
 
 # --------------------------------------------------------------------------- --bare CLI
@@ -1397,54 +1478,6 @@ def test_cli_bare_accepts_port_and_baud():
 
 
 # --------------------------------------------------------------------------- main menu / exit dialog small-window
-
-
-async def test_help_menu_stays_boxed_on_large_window():
-    """The normal Ctrl+A Z menu keeps its centred boxed layout on a big-enough
-    terminal (no `compact` class)."""
-    from pycom.screens.help import MainMenuScreen
-
-    app = PyComApp()
-    async with app.run_test(size=(100, 30)) as pilot:
-        await pilot.pause()
-        app.push_screen(MainMenuScreen())
-        await pilot.pause(0.2)
-        scr = app.screen_stack[-1]
-        assert not scr.query_one("#help-box").has_class("compact")
-
-
-async def test_help_menu_compact_on_small_window_stays_usable():
-    """Regression: the Ctrl+A Z menu overflowed tiny terminals.  Below the
-    threshold the root toggles `compact`: it fills the screen, fits inside it,
-    and every item is still reachable with the arrow keys."""
-    from pycom.screens.help import MainMenuScreen
-
-    app = PyComApp()
-    async with app.run_test(size=(40, 12)) as pilot:
-        await pilot.pause()
-        app.push_screen(MainMenuScreen())
-        await pilot.pause(0.2)
-        scr = app.screen_stack[-1]
-        root = scr.query_one("#help-box")
-        assert root.has_class("compact")
-        # the box must lie fully inside the terminal
-        assert root.region.x >= 0 and root.region.y >= 0
-        assert root.region.right <= scr.size.width
-        assert root.region.bottom <= scr.size.height
-        # first item focused; arrows reach the last one (menu scrolls into view)
-        assert app.focused.id == "menu-p"
-        for _ in range(8):
-            await pilot.press("down")
-            await pilot.pause(0.01)
-        assert app.focused.id == "menu-x"
-
-        # 再往下可聚焦到左下角“返回”按钮，Enter 关闭菜单
-        await pilot.press("down")
-        await pilot.pause(0.01)
-        assert app.focused.id == "menu-back"
-        await pilot.press("enter")
-        await pilot.pause(0.2)
-        assert len(app.screen_stack) == 1
 
 
 async def test_confirm_dialog_stays_boxed_on_large_window():

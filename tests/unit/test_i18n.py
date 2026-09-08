@@ -108,13 +108,12 @@ async def test_set_language_persists_and_refreshes_ui(monkeypatch):
 
 
 async def test_main_menu_d_opens_transfer_submenu():
-    from pycom.screens.help import MainMenuScreen
     from pycom.screens.transfermenu import TransferMenuScreen
 
     app = PyComApp()
     async with app.run_test(size=(100, 30)) as pilot:
         await pilot.pause()
-        app.push_screen(MainMenuScreen())
+        app._open_menu()
         await pilot.pause(0.2)
         await pilot.press("d")
         await pilot.pause(0.3)
@@ -168,25 +167,20 @@ async def test_language_screen_switches_to_english():
 
 
 async def test_english_menu_renders_english_labels():
-    from pycom.screens.help import MainMenuScreen
-
     app = PyComApp(cfg=AppConfig(language="en"))
     async with app.run_test(size=(100, 30)) as pilot:
         await pilot.pause()
-        app.push_screen(MainMenuScreen())
+        app._open_menu()
         await pilot.pause(0.2)
-        scr = app.screen_stack[-1]
-        assert "Serial port" in str(scr.query_one("#menu-p").render())
-        assert "Quit" in str(scr.query_one("#menu-x").render())
-        assert "Data transfer" in str(scr.query_one("#menu-d").render())
+        assert "Serial port" in str(app.query_one("#menu-p").render())
+        assert "Quit" in str(app.query_one("#menu-x").render())
+        assert "Data transfer" in str(app.query_one("#menu-d").render())
 
 
 async def test_main_menu_has_no_self_referential_item():
-    from pycom.screens.help import MainMenuScreen
-
     app = PyComApp()
     async with app.run_test(size=(100, 30)) as pilot:
         await pilot.pause()
-        app.push_screen(MainMenuScreen())
+        app._open_menu()
         await pilot.pause(0.2)
-        assert len(app.screen_stack[-1].query("#menu-z")) == 0
+        assert len(app.query("#menu-z")) == 0

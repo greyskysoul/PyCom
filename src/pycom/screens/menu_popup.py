@@ -1,0 +1,125 @@
+"""Floating main-menu popup that replaces the old full-screen menu screen.
+
+The popup is mounted into the main screen as an overlay and anchored at the
+bottom-left, so it floats above the terminal (the anchor is the 菜单 button in
+the bottom row).  Arrow keys move the highlight, Enter / Space or the leading
+letter runs an item, Esc or clicking outside the box closes it.
+"""
+
+from __future__ import annotations
+
+import contextlib
+from collections.abc import Callable
+from functools import partial
+
+from textual.app import ComposeResult
+from textual.containers import Container, Vertical
+from textual.dom import DOMNode
+from textual.events import Click, Key
+from textual.widgets import Button, Static
+
+from pycom.i18n import tr
+
+# 主菜单条目（key, 中文标签）。key 为功能热键字母（也是左侧显示的快捷字母）。
+MAIN_MENU = [
+    ("p", "串口参数"),
+    ("d", "数据传输"),
+    ("c", "清屏"),
+    ("h", "16进制 开/关"),
+    ("l", "会话捕获 开/关"),
+    ("o", "选项设置"),
+    ("y", "语言"),
+    ("a", "关于"),
+    ("x", "退出"),
+]
+
+
+class MainMenuPopup(Container):
+    """Bottom-left floating menu listing the main functions.
+
+    Mount into the main screen with :meth:`~textual.dom.DOMNode.mount`; the
+    widget removes itself from the DOM when an item is picked or it is closed.
+    ``on_pick`` receives the single-letter action code (see ``menu_action``).
+    """
+
+    def __init__(self, on_pick: Callable[[str], None]) -> None:
+        super().__init__(id="popup-overlay")
+        self._rows = [(key, tr(label)) for key, label in MAIN_MENU]
+        self._on_pick = on_pick
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="menu-popup"):
+            yield Static(tr("功能菜单"), id="menu-title")
+            for key, label in self._rows:
+                yield Button(
+                    f"  {key}   {label}",
+                    id=f"menu-{key}",
+                    classes="menu-item",
+                    compact=True,
+                )
+
+    def on_mount(self) -> None:
+        self.query_one(".menu-item", Button).focus()
+
+    # -- helpers -----------------------------------------------------------------
+    def _codes(self) -> set[str]:
+        return {key for key, _ in self._rows}
+
+    def _close(self) -> None:
+        with contextlib.suppress(Exception):
+            self.remove()
+
+    def _pick(self, code: str) -> None:
+        self._close()
+        # Run the action after this popup is gone (avoid a 0.0 timer — Textual 8
+        # crashes dividing by a zero delay).
+        self.app.set_timer(0.05, partial(self._on_pick, code))  # type: ignore[attr-defined]
+
+    def _move(self, down: bool) -> None:
+        items = list(self.query(".menu-item"))
+        if not items:
+            return
+        idx = next((i for i, w in enumerate(items) if w.has_focus), -1)
+        if idx < 0:
+            items[0].focus()
+            return
+        items[(idx + (1 if down else -1)) % len(items)].focus()
+
+    # -- input -------------------------------------------------------------------
+    def on_key(self, event: Key) -> None:
+        if event.key == "escape":
+            event.stop()
+            self._close()
+            return
+        if event.key in ("up", "down"):
+            event.stop()
+            self._move(event.key == "down")
+            return
+        char = (event.character or "").lower()
+        if not char:
+            return
+        for code, _ in self._rows:
+            if code.startswith(char):
+                event.stop()
+                self._pick(code)
+                return
+        # Consume everything else so it never leaks to the terminal while open.
+        event.stop()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        code = (event.button.id or "").removeprefix("menu-")
+        if code in self._codes():
+            event.stop()
+            self._pick(code)
+
+    def on_click(self, event: Click) -> None:
+        event.stop()
+        # A click that lands on the menu box itself (or one of its children)
+        # is handled above; only clicks on the surrounding overlay close it.
+        box = self.query_one("#menu-popup")
+        widget: DOMNode | None = event.widget
+        while widget is not None and widget is not self:
+            if widget is box:
+                return
+            widget = widget.parent
+        self._close()
