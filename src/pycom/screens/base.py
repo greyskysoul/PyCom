@@ -22,6 +22,8 @@ from textual.widgets import (
     Static,
 )
 
+from pycom.i18n import tr
+
 
 class FieldSelect(Select, inherit_bindings=False):
     """表单下拉框（本应用所有模态共用）。
@@ -276,14 +278,14 @@ class ConfirmDialog(ResponsiveCompact):
         self,
         title: str,
         message: str,
-        yes: str = "是",
-        no: str = "否",
+        yes: str | None = None,
+        no: str | None = None,
     ) -> None:
         super().__init__()
         self._title = title
         self._message = message
-        self._yes = yes
-        self._no = no
+        self._yes = yes if yes is not None else tr("是")
+        self._no = no if no is not None else tr("否")
 
     def compose(self) -> ComposeResult:
         with Vertical(id="confirm"):

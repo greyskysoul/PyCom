@@ -8,6 +8,7 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Button, DirectoryTree, Static
 
+from pycom.i18n import tr
 from pycom.screens.base import ModalBase
 
 
@@ -26,14 +27,14 @@ class PathPicker(ModalBase):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="picker-box"):
-            yield Static("选择文件 / 目录", id="picker-title")
+            yield Static(tr("选择文件 / 目录"), id="picker-title")
             yield Static("", id="picker-path")
             with Vertical(id="picker-tree"):
                 pass
             with Horizontal(id="picker-buttons"):
-                yield Button("上一级", id="up", compact=True)
-                yield Button("选择当前目录", id="choose", compact=True)
-                yield Button("取消", id="cancel", compact=True)
+                yield Button(tr("上一级"), id="up", compact=True)
+                yield Button(tr("选择当前目录"), id="choose", compact=True)
+                yield Button(tr("取消"), id="cancel", compact=True)
 
     def on_mount(self) -> None:
         if not self._pick_files:

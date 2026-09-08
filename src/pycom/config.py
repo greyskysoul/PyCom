@@ -82,6 +82,8 @@ class AppConfig:
     # --- ui ---
     auto_scroll: bool = True
     scrollback: int = 4000
+    # UI language: "zh" | "en" | "" (= auto: detect the OS language at startup)
+    language: str = ""
 
 
 def _config_dir() -> str:

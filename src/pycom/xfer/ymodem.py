@@ -18,6 +18,8 @@ import threading
 import time
 from collections.abc import Callable
 
+from pycom.i18n import tr
+
 SOH = 0x01
 STX = 0x02
 EOT = 0x04
@@ -210,7 +212,7 @@ class YModemEngine:
                 stream.seek(pos)
             except (OSError, ValueError):
                 total = None
-        self._emit("start", name, 0, total)
+        self._emit(tr("准备发送…"), name, 0, total)
 
         init = C_CHR if crc_mode else NAK
         ready = None
@@ -218,28 +220,28 @@ class YModemEngine:
             self._write(bytes([init]))
             b = self._wait_for((C_CHR, NAK), self.timeout)
             if b is _ABORT:
-                return False, "对方中止"
+                return False, tr("对方中止")
             if b is not None:
                 ready = b
                 break
         if ready is None:
-            return False, "无响应（对方未进入接收状态）"
+            return False, tr("无响应（对方未进入接收状态）")
         crc_mode = ready == C_CHR
-        self._emit("发送文件头…", name, 0, total)
+        self._emit(tr("发送文件头…"), name, 0, total)
 
         # --- block 0 (header) ---
         header = build_block0(
             name, total if total is not None else size, mtime=int(time.time()), mode=0o100644
         )
         if not self._ack_block(header, crc_mode, first=True):
-            return False, "文件头发送失败"
-        self._emit("传输中…", name, 0, total)
+            return False, tr("文件头发送失败")
+        self._emit(tr("传输中…"), name, 0, total)
 
         # receiver signals data mode with 'C' (crc) — some bootloaders skip this
         sig = self._read1(1.0)
         if sig == CAN:
             self._send_can()
-            return False, "对方中止"
+            return False, tr("对方中止")
         if sig is not None and sig != C_CHR and sig != NAK:
             self._buf = bytes([sig]) + self._buf  # push back unexpected
 
@@ -258,30 +260,30 @@ class YModemEngine:
             if seq == 0:
                 seq = 1
             sent += len(chunk)
-            self._emit("progress", name, sent, total)
+            self._emit(tr("传输中…"), name, sent, total)
 
         # --- EOT sequence ---
         for _attempt in range(self.retries + 1):
             if self.cancel.is_set():
-                return False, "用户取消"
+                return False, tr("用户取消")
             self._write(bytes([EOT]))
             b = self._wait_for((ACK, NAK), self.timeout)
             if b is _ABORT:
-                return False, "对方中止"
+                return False, tr("对方中止")
             if b == ACK:
                 break
             # NAK or timeout -> resend EOT (receiver expects two EOTs)
         else:
-            return False, "EOT 确认失败"
-        self._emit("结束中…", name, sent, total)
+            return False, tr("EOT 确认失败")
+        self._emit(tr("结束中…"), name, sent, total)
 
         # YMODEM batch terminator: an empty block 0 — tolerated if no reply
         self._write(build_block0("", None))
         end = self._read1(2.0)
         if end == CAN:
-            return False, "对方中止"
-        self._emit("完成", name, sent, total)
-        return True, f"已发送 {sent:,} 字节"
+            return False, tr("对方中止")
+        self._emit(tr("完成"), name, sent, total)
+        return True, tr("已发送 {n} 字节", n=sent)
 
     def _ack_block(self, frame: bytes, crc_mode: bool, first: bool = False) -> bool:
         for _ in range(self.retries + 1):
@@ -300,16 +302,16 @@ class YModemEngine:
         frame = build_block(seq, data, crc_mode)
         for _ in range(self.retries + 1):
             if self.cancel.is_set():
-                return False, "用户取消"
+                return False, tr("用户取消")
             self._write(frame)
             b = self._wait_for((ACK, NAK), self.timeout)
             if b is _ABORT:
                 self._send_can()
-                return False, "对方中止"
+                return False, tr("对方中止")
             if b == ACK:
                 return True, ""
         self._send_can()
-        return False, "数据块重传超限（可尝试 128 字节块）"
+        return False, tr("数据块重传超限（可尝试 128 字节块）")
 
     # ============================================================================= RECV
     def recv(self, open_file) -> tuple[bool, str, str | None]:
@@ -331,31 +333,31 @@ class YModemEngine:
             if h is None:
                 continue
             if h == CAN:
-                return False, "对方中止", None
+                return False, tr("对方中止"), None
             if h == SOH:
                 break
             # garbage: keep sending init
         else:
-            return False, "超时", None
+            return False, tr("超时"), None
 
         # ---- block 0 : file header ----
         self._buf = bytes([h]) + self._buf
         kind, seq, payload = self._receive_block(crc_mode)
         if kind != "data" or seq != 0:
-            return False, "文件头错误", None
+            return False, tr("文件头错误"), None
         filename, fsize = parse_block0(payload)
         if not filename:
-            return False, "收到空文件头", None
+            return False, tr("收到空文件头"), None
         stream = open_file(filename, fsize)
         if stream is None:
             self._send_can()
-            return False, f"拒绝接收 {filename}", None
+            return False, tr("拒绝接收 {name}", name=filename), None
 
         self._write(bytes([ACK]))
-        self._emit("开始接收…", filename, 0, fsize)
+        self._emit(tr("开始接收…"), filename, 0, fsize)
         # request data in the negotiated mode
         self._write(bytes([init]))
-        self._emit("接收中…", filename, 0, fsize)
+        self._emit(tr("接收中…"), filename, 0, fsize)
 
         expected = 1
         last_seq = -1
@@ -373,7 +375,7 @@ class YModemEngine:
                     self._write(bytes([NAK]))
                     again = self._read1(self.timeout)
                     if again == CAN:
-                        reason = "对方中止"
+                        reason = tr("对方中止")
                         break
                     if again == EOT:
                         self._write(bytes([ACK]))
@@ -401,7 +403,7 @@ class YModemEngine:
                     expected = 1
                 last_seq = seq
                 self._write(bytes([ACK]))
-                self._emit("progress", filename, sent, fsize)
+                self._emit(tr("传输中…"), filename, sent, fsize)
             # drop the 0x1A padding of the last partial block
             if ok and fsize is not None:
                 with contextlib.suppress(Exception):
@@ -412,7 +414,7 @@ class YModemEngine:
 
         if not ok:
             self._send_can()
-            return False, reason or "接收失败", filename
+            return False, reason or tr("接收失败"), filename
 
         # optional YMODEM batch terminator block
         term = self._read1(1.5)
@@ -423,8 +425,8 @@ class YModemEngine:
                 name2, _ = parse_block0(payload)
                 if not name2:  # end-of-batch marker
                     self._write(bytes([ACK]))
-        self._emit("完成", filename, sent, fsize)
-        return True, f"已接收 {filename} ({sent:,} 字节)", filename
+        self._emit(tr("完成"), filename, sent, fsize)
+        return True, tr("已接收 {name} ({n} 字节)", name=filename, n=sent), filename
 
     def _receive_block(self, crc_mode: bool) -> tuple[str, int, bytes]:
         """Read one full block.  Returns (kind, seq, payload).

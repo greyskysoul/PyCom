@@ -14,6 +14,7 @@ import threading
 from collections.abc import Callable
 
 from pycom.config import ConnectionSettings
+from pycom.i18n import tr
 
 try:
     import serial
@@ -69,7 +70,7 @@ class SerialManager:
             return "pyserial is not installed"
         self.close()
         if not settings.port:
-            return "未选择端口"
+            return tr("未选择端口")
         try:
             ser = serial.Serial(**settings.to_serial_kwargs(timeout=0.05))
         except serial.SerialException as exc:
@@ -133,7 +134,7 @@ class SerialManager:
                 data = ser.read(waiting if waiting else 1)
             except Exception as exc:  # device unplugged, closed, ...
                 if not self._stop.is_set() and self.on_error is not None:
-                    self.on_error(f"串口错误: {exc}")
+                    self.on_error(tr("串口错误: {err}", err=exc))
                 break
             if data and self.on_data is not None:
                 self.on_data(data)

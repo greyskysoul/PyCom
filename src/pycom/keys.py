@@ -8,6 +8,7 @@ canonical key string (``event.key``) plus the printable character
 from __future__ import annotations
 
 from pycom.config import AppConfig
+from pycom.i18n import tr
 
 
 # Control byte for ctrl+<letter>
@@ -166,7 +167,7 @@ def parse_hex_line(text: str) -> bytes:
     out = bytearray()
     for token in tokens:
         if len(token) not in (1, 2) or any(c not in "0123456789abcdefABCDEF" for c in token):
-            raise ValueError(f"无效的十六进制片段: {token!r}")
+            raise ValueError(tr("无效的十六进制片段: {token}", token=repr(token)))
         out.append(int(token, 16))
     return bytes(out)
 

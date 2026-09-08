@@ -1,4 +1,4 @@
-"""YMODEM send / receive screens (progress, cancel)."""
+"""YMODEM / ZMODEM send & receive screens (progress, cancel)."""
 
 from __future__ import annotations
 
@@ -12,16 +12,23 @@ from textual.containers import Horizontal, Vertical
 from textual.events import Key
 from textual.widgets import Button, Input, Label, Static
 
+from pycom.i18n import tr
 from pycom.screens.base import ModalBase
 from pycom.screens.filepicker import PathPicker
 
 _SAFE_NAME = re.compile(r"[^\w.\- ]")
+
+VALID_PROTOCOLS = ("ymodem", "zmodem")
 
 
 def sanitize_filename(name: str) -> str:
     name = os.path.basename(name.replace("\\", "/")).strip()
     name = _SAFE_NAME.sub("_", name)
     return name or "download.bin"
+
+
+def _proto_label(protocol: str) -> str:
+    return "YMODEM" if protocol != "zmodem" else "ZMODEM"
 
 
 class _TransferScreen(ModalBase):
@@ -34,7 +41,7 @@ class _TransferScreen(ModalBase):
     _last_update: float = 0.0
 
     def _make_progress_area(self) -> Static:
-        return Static("就绪。", id="xfer-state")
+        return Static(tr("就绪。"), id="xfer-state")
 
     def _update_state(self, text: str) -> None:
         self.query_one("#xfer-state", Static).update(text)
@@ -42,8 +49,8 @@ class _TransferScreen(ModalBase):
     def _on_start_clicked(self) -> None:  # overridden
         raise NotImplementedError
 
-    def _browse(self) -> None:
-        """Open a path picker — overridden by subclasses."""
+    def _browse(self) -> None:  # overridden
+        raise NotImplementedError
 
     def _start(self, ok: bool) -> None:
         self.active = ok
@@ -60,7 +67,7 @@ class _TransferScreen(ModalBase):
             if self.active:
                 # Esc while transferring = request to cancel (dialog stays open)
                 self.app.cancel_transfer()  # type: ignore[attr-defined]
-                self._update_state("正在取消…")
+                self._update_state(tr("正在取消…"))
             else:
                 self.dismiss(None)
 
@@ -87,7 +94,8 @@ class _TransferScreen(ModalBase):
 
     def show_result(self, ok: bool, reason: str) -> None:
         self._start(False)
-        self._update_state(f"{'完成' if ok else '失败/中止'}: {reason}")
+        prefix = tr("完成") if ok else tr("失败/中止")
+        self._update_state(f"{prefix}: {reason}")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         bid = event.button.id
@@ -95,7 +103,7 @@ class _TransferScreen(ModalBase):
             self._on_start_clicked()
         elif bid == "cancel":
             self.app.cancel_transfer()  # type: ignore[attr-defined]
-            self._update_state("正在取消…")
+            self._update_state(tr("正在取消…"))
         elif bid == "browse":
             self._browse()
         elif bid == "close" and not self.active:
@@ -103,19 +111,24 @@ class _TransferScreen(ModalBase):
 
 
 class SendScreen(_TransferScreen):
-    """Send a file to the device with YMODEM."""
+    """Send a file to the device with YMODEM or ZMODEM."""
+
+    def __init__(self, protocol: str = "ymodem") -> None:
+        super().__init__()
+        self.protocol = protocol if protocol in VALID_PROTOCOLS else "ymodem"
 
     def compose(self) -> ComposeResult:
+        title = f"{tr('发送文件')} - {_proto_label(self.protocol)}"
         with Vertical(id="xfer-box"):
-            yield Static("发送文件 - YMODEM", id="xfer-title")
+            yield Static(title, id="xfer-title")
             with Horizontal(classes="form-row"):
-                yield Label("文件", classes="form-label")
-                yield Input("", id="file", placeholder="要发送的文件路径")
-                yield Button("浏览…", id="browse", compact=True)
+                yield Label(tr("文件"), classes="form-label")
+                yield Input("", id="file", placeholder=tr("要发送的文件路径"))
+                yield Button(tr("浏览…"), id="browse", compact=True)
             with Horizontal(id="xfer-buttons"):
-                yield Button("开始发送", id="start", variant="primary", compact=True)
-                yield Button("取消传输", id="cancel", disabled=True, compact=True)
-                yield Button("关闭", id="close", compact=True)
+                yield Button(tr("开始发送"), id="start", variant="primary", compact=True)
+                yield Button(tr("取消传输"), id="cancel", disabled=True, compact=True)
+                yield Button(tr("关闭"), id="close", compact=True)
             yield self._make_progress_area()
 
     def on_mount(self) -> None:
@@ -136,35 +149,40 @@ class SendScreen(_TransferScreen):
     def _on_start_clicked(self) -> None:
         path = self.query_one("#file", Input).value.strip()
         if not path or not os.path.isfile(path):
-            self._update_state("文件不存在: " + path)
+            self._update_state(tr("文件不存在: {path}", path=path))
             return
-        err = self.app.start_transfer_send(path)  # type: ignore[attr-defined]
+        err = self.app.start_transfer_send(path, protocol=self.protocol)  # type: ignore[attr-defined]
         if err:
             self._update_state(err)
             return
         self._start(True)
         self._update_state(
-            f"发送 {os.path.basename(path)} — 等待设备进入接收状态 (Ctrl+A S 前请先在对端启动接收)…"
+            tr("发送 {file} — 等待设备进入接收状态 (先在对端启动接收)…", file=os.path.basename(path))
         )
 
 
 class RecvScreen(_TransferScreen):
-    """Receive a file from the device with YMODEM."""
+    """Receive a file from the device with YMODEM or ZMODEM."""
+
+    def __init__(self, protocol: str = "ymodem") -> None:
+        super().__init__()
+        self.protocol = protocol if protocol in VALID_PROTOCOLS else "ymodem"
 
     def compose(self) -> ComposeResult:
+        title = f"{tr('接收文件')} - {_proto_label(self.protocol)}"
         with Vertical(id="xfer-box"):
-            yield Static("接收文件 - YMODEM", id="xfer-title")
+            yield Static(title, id="xfer-title")
             with Horizontal(classes="form-row"):
-                yield Label("保存目录", classes="form-label")
-                yield Input("", id="dir", placeholder="目录")
-                yield Button("浏览…", id="browse", compact=True)
+                yield Label(tr("保存目录"), classes="form-label")
+                yield Input("", id="dir", placeholder=tr("目录"))
+                yield Button(tr("浏览…"), id="browse", compact=True)
             with Horizontal(classes="form-row"):
-                yield Label("文件名", classes="form-label")
-                yield Input("", id="name", placeholder="留空 = 使用设备发送的文件名")
+                yield Label(tr("文件名"), classes="form-label")
+                yield Input("", id="name", placeholder=tr("留空 = 使用设备发送的文件名"))
             with Horizontal(id="xfer-buttons"):
-                yield Button("开始接收", id="start", variant="primary", compact=True)
-                yield Button("取消传输", id="cancel", disabled=True, compact=True)
-                yield Button("关闭", id="close", compact=True)
+                yield Button(tr("开始接收"), id="start", variant="primary", compact=True)
+                yield Button(tr("取消传输"), id="cancel", disabled=True, compact=True)
+                yield Button(tr("关闭"), id="close", compact=True)
             yield self._make_progress_area()
 
     def on_mount(self) -> None:
@@ -184,12 +202,12 @@ class RecvScreen(_TransferScreen):
     def _on_start_clicked(self) -> None:
         directory = self.query_one("#dir", Input).value.strip() or os.getcwd()
         if not os.path.isdir(directory):
-            self._update_state("目录不存在: " + directory)
+            self._update_state(tr("目录不存在: {dir}", dir=directory))
             return
         name = self.query_one("#name", Input).value.strip()
-        err = self.app.start_transfer_recv(directory, name)  # type: ignore[attr-defined]
+        err = self.app.start_transfer_recv(directory, name, protocol=self.protocol)  # type: ignore[attr-defined]
         if err:
             self._update_state(err)
             return
         self._start(True)
-        self._update_state("等待设备发送 (请先在对端启动 YMODEM 发送)…")
+        self._update_state(tr("等待设备发送 (请先在对端启动发送)…"))

@@ -10,33 +10,46 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Button, DataTable, Input, Label, Select, Static
 
 from pycom.config import ConnectionSettings
+from pycom.i18n import tr
 from pycom.screens.base import AdaptiveModal, FieldSelect
 from pycom.serialio import available_ports
+
+_PORT_PLACEHOLDERS = {
+    "baud": "115200",
+    "bytesize": "8",
+    "parity": "N / E / O",
+    "stopbits": "1 / 2",
+    "flow": "none / rtscts / xonxoff",
+}
+
+
+def _action_buttons() -> ComposeResult:
+    yield Button(tr("刷新"), id="refresh", compact=True)
+    yield Button(tr("连接"), id="connect", variant="primary", compact=True)
+    yield Button(tr("返回"), id="cancel", compact=True)
 
 
 class _ConnRich(Vertical):
     """Full layout: detected-port table plus parameter fields in a box."""
 
     def compose(self) -> ComposeResult:
-        yield Static("串口连接参数", id="conn-title")
+        yield Static(tr("串口连接参数"), id="conn-title")
         yield DataTable(id="ports", cursor_type="row")
         with Horizontal(classes="form-row"):
-            yield Label("波特率", classes="form-label")
-            yield Input("", id="baud", placeholder="115200", compact=True)
-            yield Label("数据位", classes="form-label")
-            yield Input("", id="bytesize", placeholder="8", compact=True)
+            yield Label(tr("波特率"), classes="form-label")
+            yield Input("", id="baud", placeholder=_PORT_PLACEHOLDERS["baud"], compact=True)
+            yield Label(tr("数据位"), classes="form-label")
+            yield Input("", id="bytesize", placeholder=_PORT_PLACEHOLDERS["bytesize"], compact=True)
         with Horizontal(classes="form-row"):
-            yield Label("校验", classes="form-label")
-            yield Input("", id="parity", placeholder="N / E / O", compact=True)
-            yield Label("停止位", classes="form-label")
-            yield Input("", id="stopbits", placeholder="1 / 2", compact=True)
+            yield Label(tr("校验"), classes="form-label")
+            yield Input("", id="parity", placeholder=_PORT_PLACEHOLDERS["parity"], compact=True)
+            yield Label(tr("停止位"), classes="form-label")
+            yield Input("", id="stopbits", placeholder=_PORT_PLACEHOLDERS["stopbits"], compact=True)
         with Horizontal(classes="form-row"):
-            yield Label("流控", classes="form-label")
-            yield Input("", id="flow", placeholder="none / rtscts / xonxoff", compact=True)
+            yield Label(tr("流控"), classes="form-label")
+            yield Input("", id="flow", placeholder=_PORT_PLACEHOLDERS["flow"], compact=True)
         with Horizontal(id="conn-buttons"):
-            yield Button("刷新", id="refresh", compact=True)
-            yield Button("连接", id="connect", variant="primary", compact=True)
-            yield Button("返回", id="cancel", compact=True)
+            yield from _action_buttons()
         yield Label("", id="conn-error")
 
 
@@ -45,37 +58,36 @@ class _ConnCompact(Vertical):
     inside a scroll area, plus the port list shown as a dropdown."""
 
     def compose(self) -> ComposeResult:
-        yield Static("串口连接参数", id="conn-title")
+        yield Static(tr("串口连接参数"), id="conn-title")
         with VerticalScroll(id="conn-body"):
             with Horizontal(classes="c-row"):
-                yield Label("端口", classes="c-label")
+                yield Label(tr("端口"), classes="c-label")
                 # 先放占位项避免空选项；实际端口列表在 after_build() 中填充
                 yield FieldSelect(
-                    [("检测串口…", "")],
+                    [(tr("检测串口…"), "")],
                     id="port-sel",
                     allow_blank=False,
                     compact=True,
-                    prompt="检测到的串口",
+                    prompt=tr("检测到的串口"),
                 )
-            with Horizontal(classes="c-row"):
-                yield Label("波特率", classes="c-label")
-                yield Input("", id="baud", placeholder="115200", compact=True)
-            with Horizontal(classes="c-row"):
-                yield Label("数据位", classes="c-label")
-                yield Input("", id="bytesize", placeholder="8", compact=True)
-            with Horizontal(classes="c-row"):
-                yield Label("校验", classes="c-label")
-                yield Input("", id="parity", placeholder="N / E / O", compact=True)
-            with Horizontal(classes="c-row"):
-                yield Label("停止位", classes="c-label")
-                yield Input("", id="stopbits", placeholder="1 / 2", compact=True)
-            with Horizontal(classes="c-row"):
-                yield Label("流控", classes="c-label")
-                yield Input("", id="flow", placeholder="none / rtscts / xonxoff", compact=True)
+            for label in ("波特率", "数据位", "校验", "停止位", "流控"):
+                cid = {
+                    "波特率": "baud",
+                    "数据位": "bytesize",
+                    "校验": "parity",
+                    "停止位": "stopbits",
+                    "流控": "flow",
+                }[label]
+                with Horizontal(classes="c-row"):
+                    yield Label(tr(label), classes="c-label")
+                    yield Input(
+                        "",
+                        id=cid,
+                        placeholder=_PORT_PLACEHOLDERS[cid],
+                        compact=True,
+                    )
         with Horizontal(id="conn-buttons"):
-            yield Button("刷新", id="refresh", compact=True)
-            yield Button("连接", id="connect", variant="primary", compact=True)
-            yield Button("返回", id="cancel", compact=True)
+            yield from _action_buttons()
         yield Label("", id="conn-error")
 
 
@@ -110,7 +122,7 @@ class ConnectionScreen(AdaptiveModal):
             self._fill_ports()
             self.query_one("#port-sel", FieldSelect).focus()
         else:
-            self.query_one("#ports", DataTable).add_columns("端口", "描述")
+            self.query_one("#ports", DataTable).add_columns(tr("端口"), tr("描述"))
             self._fill_ports()
             self.query_one("#ports", DataTable).focus()
 
@@ -125,7 +137,7 @@ class ConnectionScreen(AdaptiveModal):
         self._devices = available_ports()
         # 虚拟回环设备：默认隐藏，仅 --enable-debug 调试模式下提供（无需真实串口，纯回显）
         if getattr(self.app, "enable_debug", False):
-            self._devices.append(("LOOPBACK", "虚拟回环（调试 - 纯回显）"))
+            self._devices.append(("LOOPBACK", tr("虚拟回环（调试 - 纯回显）")))
         if self._compact:
             select = self.query_one("#port-sel", FieldSelect)
             select.set_options([(dev, dev) for dev in self._device_names()])
@@ -152,14 +164,14 @@ class ConnectionScreen(AdaptiveModal):
             base.stopbits = float(self.query_one("#stopbits", Input).value or base.stopbits)
             base.flow = (self.query_one("#flow", Input).value or base.flow).lower()
         except (ValueError, IndexError):
-            self._set_error("参数格式错误")
+            self._set_error(tr("参数格式错误"))
             return None
         if base.flow not in ("none", "rtscts", "xonxoff"):
             base.flow = "none"
         if base.parity not in ("N", "E", "O"):
             base.parity = "N"
         if not base.port:
-            self._set_error("请先在列表中选择端口")
+            self._set_error(tr("请先在列表中选择端口"))
             return None
         return base
 
@@ -196,7 +208,7 @@ class ConnectionScreen(AdaptiveModal):
             else app.open_serial(settings)  # type: ignore[attr-defined]
         )
         if err:
-            self._set_error(f"连接失败: {err}")
+            self._set_error(tr("连接失败: {err}", err=err))
             return
         app.refresh_status()
         self.dismiss(settings)

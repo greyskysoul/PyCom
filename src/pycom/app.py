@@ -25,6 +25,7 @@ from textual.widgets import Button, TextArea
 
 from pycom import APP_NAME, __version__
 from pycom.config import AppConfig, ConnectionSettings, load_config, save_config
+from pycom.i18n import detect_system_language, get_language, set_language, tr
 from pycom.keys import (
     KeyMapper,
     decode_escapes,
@@ -32,15 +33,19 @@ from pycom.keys import (
     hex_bytes_per_line,
     parse_hex_line,
 )
+from pycom.screens.about import AboutScreen
 from pycom.screens.base import ConfirmDialog
 from pycom.screens.connection import ConnectionScreen
 from pycom.screens.help import MainMenuScreen
+from pycom.screens.language import LanguageScreen
 from pycom.screens.options import OptionsScreen
 from pycom.screens.transfer import RecvScreen, SendScreen
+from pycom.screens.transfermenu import TransferMenuScreen
 from pycom.serialio import SerialManager
 from pycom.termdisplay.view import StatusBar, TerminalView
 from pycom.termdisplay.vt import TerminalModel
 from pycom.xfer.ymodem import YModemEngine
+from pycom.xfer.zmodem import ZModemEngine
 
 _HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
 
@@ -57,9 +62,13 @@ _EXIT_TOO_SMALL = "too-small"
 
 
 def _too_small_message(cols: int, rows: int) -> str:
-    return (
-        f"PyCom: 终端窗口太小（{cols} 列 × {rows} 行），界面无法正常使用。\n"
-        f"请将窗口放大到至少 {MIN_TERMINAL_COLS} 列 × {MIN_TERMINAL_ROWS} 行后重新运行。\n"
+    return tr(
+        "PyCom: 终端窗口太小（{cols} 列 × {rows} 行），界面无法正常使用。\n"
+        "请将窗口放大到至少 {mincols} 列 × {minrows} 行后重新运行。\n",
+        cols=cols,
+        rows=rows,
+        mincols=MIN_TERMINAL_COLS,
+        minrows=MIN_TERMINAL_ROWS,
     )
 
 
@@ -173,7 +182,7 @@ class _HexBar(Vertical):
 
     def compose(self) -> ComposeResult:
         yield _HexArea(id="hex-input")
-        yield Button("发送", id="hex-send", compact=True)
+        yield Button(tr("发送"), id="hex-send", compact=True)
 
 
 class _StatusMenuButton(Button, can_focus=False):
@@ -187,14 +196,17 @@ class _StatusMenuButton(Button, can_focus=False):
 
 _PREFIX_FUNCS = {
     "z": "主菜单",
-    "x": "退出",
+    "p": "串口参数",
     "s": "发送文件",
     "r": "接收文件",
+    "u": "发送文件(ZMODEM)",
     "c": "清屏",
-    "l": "捕获开/关",
     "h": "16进制 开/关",
-    "p": "串口参数",
+    "l": "捕获开/关",
     "o": "选项",
+    "y": "语言",
+    "a": "关于",
+    "x": "退出",
 }
 
 
@@ -259,6 +271,12 @@ class PyComApp(App):
     ) -> None:
         super().__init__()
         self.cfg = cfg or AppConfig()
+        # 解析界面语言：优先已保存的选择，否则自动侦测系统语言（失败退回英文）
+        if self.cfg.language not in ("zh", "en"):
+            self.cfg.language = set_language(detect_system_language())
+        else:
+            set_language(self.cfg.language)
+        self.sub_title = tr("串口终端 - YMODEM")
         self.cli_conn = cli_conn
         self.exit_idle = max(0.0, float(exit_idle)) if exit_idle is not None else None
         self.startup_text = startup_text
@@ -309,7 +327,7 @@ class PyComApp(App):
             yield TerminalView(self.model, id="term")
             with Horizontal(id="bottom"):
                 # “菜单”按钮在左下角；状态文字占满其余宽度
-                yield _StatusMenuButton("菜单", id="menu-btn")
+                yield _StatusMenuButton(tr("菜单"), id="menu-btn")
                 yield StatusBar("", id="status")
 
     # ------------------------------------------------------ minimum-size guard
@@ -358,9 +376,9 @@ class PyComApp(App):
         if self.cli_conn is not None:
             err = self.open_serial(self.cli_conn)
             if err:
-                self.notify(f"连接失败: {err}", severity="error")
+                self.notify(tr("连接失败: {err}", err=err), severity="error")
             else:
-                self.notify(f"已连接 {self.cli_conn.short()}")
+                self.notify(tr("已连接 {name}", name=self.cli_conn.short()))
                 self._start_startup_send()
         self._refresh_status()
 
@@ -392,7 +410,7 @@ class PyComApp(App):
                     self._startup_write(decode_escapes(line))
                     time.sleep(0.2)
         except OSError as exc:
-            self.call_from_thread(self.notify, f"启动发送失败: {exc}", severity="error")
+            self.call_from_thread(self.notify, tr("启动发送失败: {err}", err=exc), severity="error")
         finally:
             self._startup_thread = None
 
@@ -413,7 +431,7 @@ class PyComApp(App):
 
     def open_serial(self, settings: ConnectionSettings) -> str | None:
         if self._xfer_thread is not None and self._xfer_thread.is_alive():
-            return "请先完成/取消进行中的文件传输"
+            return tr("请先完成/取消进行中的文件传输")
         # 离开虚拟回环模式：一旦要打开真实串口，发送必须走该端口而不是回环。
         # 与 open_loopback()（关闭真实串口并把 _loopback 置 True）保持对称，
         # 否则 LOOPBACK → 真实串口 切换后 _loopback 仍为 True，发送会被回环
@@ -432,7 +450,7 @@ class PyComApp(App):
     def open_loopback(self) -> str | None:
         """Connect the virtual loopback device: every byte sent is echoed back."""
         if self._xfer_thread is not None and self._xfer_thread.is_alive():
-            return "请先完成/取消进行中的文件传输"
+            return tr("请先完成/取消进行中的文件传输")
         if self.serial.is_open:
             self.serial.close()
         self._loopback = True
@@ -443,12 +461,10 @@ class PyComApp(App):
         return None
 
     # --------------------------------------------- 屏幕上的本地提示（橙/粗体）
-    _STARTUP_HINT = "按 Ctrl+A Z 打开功能菜单"
-
     def _connected_hint(self) -> str:
-        name = "虚拟回环" if self._loopback else self.cfg.last.short()
+        name = tr("虚拟回环") if self._loopback else self.cfg.last.short()
         # 前后各留一行空行，让“已连接”提示在屏幕上更醒目
-        return f"\r\n已连接 {name}\r\n"
+        return f"\r\n{tr('已连接 {name}', name=name)}\r\n"
 
     def _print_local_hint(self, text: str) -> None:
         """排队一条本地提示（橙/粗体），等布局稳定后统一打印。
@@ -491,13 +507,14 @@ class PyComApp(App):
 
     def _print_startup_hint(self) -> None:
         """程序启动即显示菜单快捷键提示（无论有没有连接端口）。"""
-        self._print_local_hint(self._STARTUP_HINT)
+        self._print_local_hint(tr("按 Ctrl+A Z 打开功能菜单"))
 
-    _NO_PORT_MSG = "未连接端口：请按 Ctrl+A P 连接后再试"
+    def _no_port_msg(self) -> str:
+        return tr("未连接端口：请按 Ctrl+A P 连接后再试")
 
     def _remind_connect(self) -> None:
         """Toast shown when a send is attempted with no port connected."""
-        self.notify(self._NO_PORT_MSG, severity="warning", timeout=6)
+        self.notify(self._no_port_msg(), severity="warning", timeout=6)
 
     # ------------------------------------------------------------- HEX send/recv bar
     def _hex_bar(self) -> Vertical:
@@ -532,7 +549,7 @@ class PyComApp(App):
         field = self.query_one("#hex-input", TextArea)
         raw = field.text.strip()
         if not raw:
-            self.notify("请先在 16 进制输入框输入字节", severity="warning")
+            self.notify(tr("请先在 16 进制输入框输入字节"), severity="warning")
             return
         try:
             data = parse_hex_line(raw)
@@ -700,15 +717,15 @@ class PyComApp(App):
         text = self.screen.get_selected_text()
         if text:
             self.copy_to_clipboard(text)
-            self.notify(f"已复制 {len(text)} 字符")
+            self.notify(tr("已复制 {n} 字符", n=len(text)))
         else:
-            self.notify("没有选中的文本", severity="warning")
+            self.notify(tr("没有选中的文本"), severity="warning")
 
     def _paste_clipboard(self) -> None:
         """把剪贴板内容发送到串口（Ctrl+Shift+V）。"""
         text = self.clipboard
         if not text:
-            self.notify("剪贴板为空", severity="warning")
+            self.notify(tr("剪贴板为空"), severity="warning")
             return
         if not self.is_connected():
             self._remind_connect()
@@ -736,9 +753,13 @@ class PyComApp(App):
                 focused = self.focused
                 if focused is not None and focused.id in ("hex-input", "hex-send"):
                     self.screen.set_focus(None)
-        self._status().update(
-            "前缀模式：Z 菜单 / S 发送 / R 接收 / H HEX / P 串口 / O 选项 / X 退出 / Esc 取消"
+        self._status().update(self._prefix_hint())
+
+    def _prefix_hint(self) -> str:
+        items = " / ".join(
+            f"{key.upper()} {tr(label)}" for key, label in _PREFIX_FUNCS.items()
         )
+        return tr("前缀模式: {items} / Esc 取消", items=items)
 
     def _cancel_prefix(self) -> None:
         self._prefix = False
@@ -765,21 +786,21 @@ class PyComApp(App):
         """Dispatch a single-letter menu action (also from the main-menu overlay)."""
         if code == "z":
             self.push_screen(MainMenuScreen())
+        elif code == "p":
+            self.push_screen(ConnectionScreen())
+        elif code == "d":
+            self.push_screen(TransferMenuScreen())
+        elif code == "s":
+            self.open_send("ymodem")
+        elif code == "r":
+            self.open_recv("ymodem")
+        elif code == "u":
+            self.open_send("zmodem")
         elif code == "x":
             self.push_screen(
-                ConfirmDialog("退出", "确定要退出 PyCom 吗？"),
+                ConfirmDialog(tr("退出"), tr("确定要退出 PyCom 吗？")),
                 callback=lambda yes: self.exit() if yes else None,
             )
-        elif code == "s":
-            if not self.is_connected():
-                self._remind_connect()
-            else:
-                self.push_screen(SendScreen())
-        elif code == "r":
-            if not self.is_connected():
-                self._remind_connect()
-            else:
-                self.push_screen(RecvScreen())
         elif code == "c":
             self.clear_terminal()
         elif code == "l":
@@ -791,15 +812,48 @@ class PyComApp(App):
                 # 快捷键开启后自动聚焦 16 进制输入框，可直接输入
                 self.set_timer(0.05, self._focus_hex_field)
             self.notify(
-                "HEX 模式已开启：在底部输入框输入，点“发送”"
+                tr("HEX 模式已开启：在底部输入框输入，点“发送”")
                 if self.cfg.hex_mode
-                else "HEX 模式已关闭"
+                else tr("HEX 模式已关闭")
             )
-
-        elif code == "p":
-            self.push_screen(ConnectionScreen())
         elif code == "o":
             self.push_screen(OptionsScreen())
+        elif code == "y":
+            self.push_screen(LanguageScreen())
+        elif code == "a":
+            self.push_screen(AboutScreen())
+
+    def open_send(self, protocol: str = "ymodem") -> None:
+        """Open the send dialog for ``protocol`` (ymodem | zmodem)."""
+        if not self.is_connected():
+            self._remind_connect()
+        else:
+            self.push_screen(SendScreen(protocol))
+
+    def open_recv(self, protocol: str = "ymodem") -> None:
+        """Open the receive dialog for ``protocol`` (ymodem | zmodem)."""
+        if not self.is_connected():
+            self._remind_connect()
+        else:
+            self.push_screen(RecvScreen(protocol))
+
+    def set_language(self, code: str) -> None:
+        """Switch the UI language now and persist the choice."""
+        if code not in ("zh", "en") or code == get_language():
+            return
+        self.cfg.language = code
+        set_language(code)
+        save_config(self.cfg)
+        self._apply_language()
+
+    def _apply_language(self) -> None:
+        """Refresh already-visible UI text after a language change."""
+        self.sub_title = tr("串口终端 - YMODEM")
+        with contextlib.suppress(Exception):
+            self.query_one("#menu-btn", Button).label = tr("菜单")
+        with contextlib.suppress(Exception):
+            self.query_one("#hex-send", Button).label = tr("发送")
+        self._refresh_status()
 
     def _focus_hex_field(self) -> None:
         with contextlib.suppress(Exception):
@@ -830,26 +884,26 @@ class PyComApp(App):
 
     # ============================================================================ status
     def _status_text(self) -> str:
-        conn = "虚拟回环" if self._loopback else self.cfg.last.short()
-        state = "已连接" if self.is_connected() else "未连接"
+        conn = tr("虚拟回环") if self._loopback else self.cfg.last.short()
+        state = tr("已连接") if self.is_connected() else tr("未连接")
         flags = []
         if self._loopback:
-            flags.append("回环")
+            flags.append(tr("回环"))
         if self.is_connected():
             flags.append(f"TX {self._tx:,}")
             flags.append(f"RX {self._rx:,}")
         if self._capture_fh is not None:
-            flags.append("捕获")
+            flags.append(tr("捕获"))
         if self.cfg.local_echo:
-            flags.append("回显")
+            flags.append(tr("回显"))
         if self.cfg.wrap:
-            flags.append("回绕")
+            flags.append(tr("回绕"))
         if self.cfg.hex_mode:
             flags.append("HEX")
         if self._prefix:
             right = ""
         elif self.cfg.hex_mode:
-            right = "HEX：底部输入，点发送"
+            right = tr("HEX：底部输入，点发送")
         else:
             # Ctrl+A Z 提示已改为右下角的“菜单”按钮，状态栏不再重复显示
             right = ""
@@ -897,14 +951,14 @@ class PyComApp(App):
         try:
             fh = open(path, "a", encoding="utf-8", newline="")  # noqa: SIM115 persistent handle
         except OSError as exc:
-            self.notify(f"无法创建捕获文件: {exc}", severity="error")
+            self.notify(tr("无法创建捕获文件: {err}", err=exc), severity="error")
             return
         self._capture_fh = fh
         self.cfg.capture_path = path
         save_config(self.cfg)
         self._cap_decoder = codecs.getincrementaldecoder(self.cfg.decode)(errors="replace")
         self._at_line_start = True
-        self.notify(f"开始捕获到 {path}")
+        self.notify(tr("开始捕获到 {path}", path=path))
         self._refresh_status()
 
     def _stop_capture(self, refresh: bool = True) -> None:
@@ -943,29 +997,34 @@ class PyComApp(App):
 
     def _guard_transfer(self) -> str | None:
         if not self.is_connected():
-            return "未连接串口"
+            return tr("未连接串口")
         if self._transfer_busy():
-            return "已有文件传输正在进行"
+            return tr("已有文件传输正在进行")
         return None
 
-    def start_transfer_send(self, path: str) -> str | None:
+    def start_transfer_send(self, path: str, protocol: str = "ymodem") -> str | None:
         err = self._guard_transfer()
         if err:
             return err
         if not os.path.isfile(path):
-            return f"文件不存在: {path}"
+            return tr("文件不存在: {path}", path=path)
         self.cfg._last_send_file = path  # type: ignore[attr-defined]
 
         self._xfer_queue = queue.Queue()
         self._xfer_cancel.clear()
         self._xfer_ui = self.screen_stack[-1] if len(self.screen_stack) > 1 else None
         self._xfer_thread = threading.Thread(
-            target=self._run_send, args=(path,), name="pycom-ymodem-send", daemon=True
+            target=self._run_send,
+            args=(path, protocol),
+            name=f"pycom-{protocol}-send",
+            daemon=True,
         )
         self._xfer_thread.start()
         return None
 
-    def start_transfer_recv(self, directory: str, name_override: str = "") -> str | None:
+    def start_transfer_recv(
+        self, directory: str, name_override: str = "", protocol: str = "ymodem"
+    ) -> str | None:
         err = self._guard_transfer()
         if err:
             return err
@@ -974,8 +1033,8 @@ class PyComApp(App):
         self._xfer_ui = self.screen_stack[-1] if len(self.screen_stack) > 1 else None
         self._xfer_thread = threading.Thread(
             target=self._run_recv,
-            args=(directory, name_override),
-            name="pycom-ymodem-recv",
+            args=(directory, name_override, protocol),
+            name=f"pycom-{protocol}-recv",
             daemon=True,
         )
         self._xfer_thread.start()
@@ -998,9 +1057,18 @@ class PyComApp(App):
         self._xfer_cancel.clear()
         self._refresh_status()
 
-    def _engine(self, cb):
+    def _engine(self, cb, protocol: str = "ymodem"):
         assert self._xfer_queue is not None
         io = _QueueIO(self._xfer_queue, self.serial, self._xfer_cancel)
+        if protocol == "zmodem":
+            return ZModemEngine(
+                io.read,
+                io.write,
+                timeout=self.cfg.xfer_timeout,
+                retries=self.cfg.xfer_retries,
+                cancel=self._xfer_cancel,
+                cb=cb,
+            )
         return YModemEngine(
             io.read,
             io.write,
@@ -1011,7 +1079,7 @@ class PyComApp(App):
             cb=cb,
         )
 
-    def _run_send(self, path: str) -> None:
+    def _run_send(self, path: str, protocol: str) -> None:
         name = os.path.basename(path)
 
         def cb(phase: str, fname: str, sent: int, total) -> None:
@@ -1019,13 +1087,13 @@ class PyComApp(App):
 
         try:
             with open(path, "rb") as fh:
-                ok, msg = self._engine(cb).send(fh, filename=name)
+                ok, msg = self._engine(cb, protocol).send(fh, filename=name)
         except Exception as exc:
             ok, msg = False, str(exc)
         self._xfer_emit("show_result", ok, msg)
         self._xfer_done()
 
-    def _run_recv(self, directory: str, name_override: str) -> None:
+    def _run_recv(self, directory: str, name_override: str, protocol: str) -> None:
         def cb(phase: str, fname: str, sent: int, total) -> None:
             self._xfer_emit("show_progress", phase, fname, sent, total)
 
@@ -1037,11 +1105,11 @@ class PyComApp(App):
             try:
                 return open(path, "wb")
             except OSError as exc:
-                self._xfer_emit("show_result", False, f"无法写入 {path}: {exc}")
+                self._xfer_emit("show_result", False, tr("无法写入 {path}: {err}", path=path, err=exc))
                 return None
 
         try:
-            ok, msg, fname = self._engine(cb).recv(open_file)
+            ok, msg, fname = self._engine(cb, protocol).recv(open_file)
         except Exception as exc:
             ok, msg = False, str(exc)
         self._xfer_emit("show_result", ok, msg)
@@ -1058,12 +1126,12 @@ class PyComApp(App):
 def _parse_args(argv):
     parser = argparse.ArgumentParser(
         prog=APP_NAME,
-        description=(
-            "minicom 风格的跨平台串口终端：VT/ANSI 渲染、YMODEM 收发、"
+        description=tr(
+            "minicom 风格的跨平台串口终端：VT/ANSI 渲染、YMODEM/ZMODEM 收发、"
             "16 进制接收/发送。\n"
             "不带参数启动即进入交互界面（Ctrl+A 打开功能菜单）。"
         ),
-        epilog=(
+        epilog=tr(
             "示例：\n"
             "  pycom -p COM3 -b 115200\n"
             '  pycom -p COM3 -s "AT\\r"\n'
@@ -1077,36 +1145,36 @@ def _parse_args(argv):
         formatter_class=argparse.RawDescriptionHelpFormatter,
         add_help=False,
     )
-    parser.add_argument("-h", "--help", action="help", help="显示本帮助并退出")
+    parser.add_argument("-h", "--help", action="help", help=tr("显示本帮助并退出"))
     parser.add_argument(
         "--version",
         action="version",
         version=f"%(prog)s {__version__}",
-        help="显示版本号并退出",
+        help=tr("显示版本号并退出"),
     )
     # 调试开关：默认隐藏，不在 --help 中展示。
     parser.add_argument("--enable-debug", action="store_true", help=argparse.SUPPRESS)
 
-    conn = parser.add_argument_group("连接参数")
+    conn = parser.add_argument_group(tr("连接参数"))
     conn.add_argument(
-        "-p", "--port", metavar="PORT", default=None, help="串口，如 COM3 或 /dev/ttyUSB0"
+        "-p", "--port", metavar="PORT", default=None, help=tr("串口，如 COM3 或 /dev/ttyUSB0")
     )
-    conn.add_argument("-b", "--baud", type=int, metavar="BAUD", default=None, help="波特率")
-    conn.add_argument("--data-bits", type=int, metavar="5-8", default=None, help="数据位")
-    conn.add_argument("--parity", metavar="N/E/O", default=None, help="校验位")
-    conn.add_argument("--stop-bits", type=float, metavar="1|1.5|2", default=None, help="停止位")
-    conn.add_argument("--flow", metavar="MODE", default=None, help="流控：none / rtscts / xonxoff")
+    conn.add_argument("-b", "--baud", type=int, metavar="BAUD", default=None, help=tr("波特率"))
+    conn.add_argument("--data-bits", type=int, metavar="5-8", default=None, help=tr("数据位"))
+    conn.add_argument("--parity", metavar="N/E/O", default=None, help=tr("校验位"))
+    conn.add_argument("--stop-bits", type=float, metavar="1|1.5|2", default=None, help=tr("停止位"))
+    conn.add_argument("--flow", metavar="MODE", default=None, help=tr("流控：none / rtscts / xonxoff"))
 
-    startup = parser.add_argument_group("启动动作")
+    startup = parser.add_argument_group(tr("启动动作"))
     startup.add_argument(
-        "-s", "--send", metavar="TEXT", default=None, help="连接后发送字符串命令（支持转义）"
+        "-s", "--send", metavar="TEXT", default=None, help=tr("连接后发送字符串命令（支持转义）")
     )
     startup.add_argument(
         "-f",
         "--script",
         metavar="FILE",
         default=None,
-        help="连接后逐行发送脚本文件（# 开头为注释行）",
+        help=tr("连接后逐行发送脚本文件（# 开头为注释行）"),
     )
     startup.add_argument(
         "-e",
@@ -1114,27 +1182,29 @@ def _parse_args(argv):
         type=float,
         metavar="SECS",
         default=None,
-        help="空闲自动退出：连续 SECS 秒未收到任何字节",
+        help=tr("空闲自动退出：连续 SECS 秒未收到任何字节"),
     )
-    startup.add_argument("--hex", action="store_true", help="启动即开启 16 进制接收/发送")
+    startup.add_argument("--hex", action="store_true", help=tr("启动即开启 16 进制接收/发送"))
 
-    bridge = parser.add_argument_group("直通模式（--bare，无界面）")
+    bridge = parser.add_argument_group(tr("直通模式（--bare，无界面）"))
     bridge.add_argument(
         "--bare",
         action="store_true",
-        help="隐藏全部界面：把 stdin 接到串口（发送），串口 RX 原样打到 stdout。"
-        "需通过 -p/--port 指定串口，适合把终端交给 AI agent 等外部进程驱动",
+        help=tr(
+            "隐藏全部界面：把 stdin 接到串口（发送），串口 RX 原样打到 stdout。"
+            "需通过 -p/--port 指定串口，适合把终端交给 AI agent 等外部进程驱动"
+        ),
     )
 
     args = parser.parse_args(argv)
     if (args.send is not None or args.script is not None) and not args.port:
-        parser.error("-s/--send、-f/--script 需要先通过 -p/--port 指定端口")
+        parser.error(tr("-s/--send、-f/--script 需要先通过 -p/--port 指定端口"))
     if args.exit_idle is not None and args.exit_idle <= 0:
-        parser.error("-e/--exit-idle 必须为正数")
+        parser.error(tr("-e/--exit-idle 必须为正数"))
     if args.bare and not args.port:
-        parser.error("--bare 直通模式必须通过 -p/--port 指定串口")
+        parser.error(tr("--bare 直通模式必须通过 -p/--port 指定串口"))
     if args.bare and (args.send or args.script or args.hex or args.exit_idle is not None):
-        parser.error("--bare 直通模式不能与 -s/-f/-e/--hex 等交互启动选项同时使用")
+        parser.error(tr("--bare 直通模式不能与 -s/-f/-e/--hex 等交互启动选项同时使用"))
     return args
 
 
@@ -1180,6 +1250,8 @@ def run_bare(args) -> int:
     pipes and talk straight to the device.
     """
     cfg = load_config()
+    if cfg.language in ("zh", "en"):
+        set_language(cfg.language)
     conn = _make_conn(cfg, args)
     assert conn is not None, "--bare requires -p/--port (enforced by argparse)"
 
@@ -1201,10 +1273,12 @@ def run_bare(args) -> int:
     mgr = SerialManager(on_data=on_rx, on_error=on_error)
     err = mgr.open(conn)
     if err:
-        sys.stderr.write(f"pycom: 连接失败: {err}\n")
+        sys.stderr.write(f"pycom: {tr('连接失败: {err}', err=err)}\n")
         sys.stderr.flush()
         return 1
-    sys.stderr.write(f"pycom: bare 直通已连接 {conn.short()}（stdin→串口，串口 RX→stdout）\n")
+    sys.stderr.write(
+        f"pycom: {tr('bare 直通已连接 {short}（stdin→串口，串口 RX→stdout）', short=conn.short())}\n"
+    )
     sys.stderr.flush()
 
     def pump_stdin() -> None:
@@ -1232,6 +1306,8 @@ def run_bare(args) -> int:
 
 
 def main(argv=None) -> int:
+    # CLI 帮助文本按侦测到的系统语言显示（失败退回英文）
+    set_language(detect_system_language())
     args = _parse_args(argv if argv is not None else sys.argv[1:])
     if args.bare:
         return run_bare(args)

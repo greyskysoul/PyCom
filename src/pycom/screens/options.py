@@ -11,6 +11,7 @@ from textual.widget import Widget
 from textual.widgets import Button, Checkbox, Input, Label, Static
 
 from pycom.config import save_config
+from pycom.i18n import tr
 from pycom.screens.base import AdaptiveModal, FieldSelect
 
 
@@ -24,37 +25,47 @@ class _CircleCheckbox(Checkbox):
         return Content.assemble((glyph, style))
 
 
-# 下拉可选项：(显示文本, 存储值)，顺序即下拉菜单中的展示顺序
-_ENTER_OPTIONS: list[tuple[str, str]] = [
-    ("CR (回车)", "cr"),
-    ("CR+LF", "crlf"),
-    ("LF (换行)", "lf"),
-    ("不发送", "none"),
-]
-_BACK_OPTIONS: list[tuple[str, str]] = [
-    ("DEL (0x7F)", "del"),
-    ("BS (0x08)", "bs"),
-]
-_DECODE_OPTIONS: list[tuple[str, str]] = [
-    ("UTF-8", "utf-8"),
-    ("GBK", "gbk"),
-    ("Latin-1", "latin-1"),
-]
-_ENTER_VALUES = {value for _, value in _ENTER_OPTIONS}
-_BACK_VALUES = {value for _, value in _BACK_OPTIONS}
-_DECODE_VALUES = {value for _, value in _DECODE_OPTIONS}
+# 下拉可选项 (显示文本, 存储值)，顺序即下拉菜单中的展示顺序。
+# 显示文本在构建时按当前语言翻译；存储值不翻译。
+_ENTER_VALUES = frozenset(("cr", "crlf", "lf", "none"))
+_BACK_VALUES = frozenset(("del", "bs"))
+_DECODE_VALUES = frozenset(("utf-8", "gbk", "latin-1"))
+
+
+def _enter_options() -> list[tuple[str, str]]:
+    return [
+        (tr("CR (回车)"), "cr"),
+        ("CR+LF", "crlf"),
+        (tr("LF (换行)"), "lf"),
+        (tr("不发送"), "none"),
+    ]
+
+
+def _back_options() -> list[tuple[str, str]]:
+    return [
+        ("DEL (0x7F)", "del"),
+        ("BS (0x08)", "bs"),
+    ]
+
+
+def _decode_options() -> list[tuple[str, str]]:
+    return [
+        ("UTF-8", "utf-8"),
+        ("GBK", "gbk"),
+        ("Latin-1", "latin-1"),
+    ]
 
 
 def _circle_fields():
     """The seven boolean option checkboxes shared by both layouts."""
     return [
-        _CircleCheckbox("本地回显", id="echo", compact=True),
-        _CircleCheckbox("自动回绕", id="wrap", compact=True),
-        _CircleCheckbox("接收 LF -> CR+LF", id="rx_cr", compact=True),
-        _CircleCheckbox("接收 CR -> CR+LF", id="rx_lf", compact=True),
-        _CircleCheckbox("捕获时加时间戳", id="ts", compact=True),
-        _CircleCheckbox("发送方向键/功能键 VT 序列", id="vt", compact=True),
-        _CircleCheckbox("16 进制接收/发送（HEX）", id="hex", compact=True),
+        _CircleCheckbox(tr("本地回显"), id="echo", compact=True),
+        _CircleCheckbox(tr("自动回绕"), id="wrap", compact=True),
+        _CircleCheckbox(tr("接收 LF -> CR+LF"), id="rx_cr", compact=True),
+        _CircleCheckbox(tr("接收 CR -> CR+LF"), id="rx_lf", compact=True),
+        _CircleCheckbox(tr("捕获时加时间戳"), id="ts", compact=True),
+        _CircleCheckbox(tr("发送方向键/功能键 VT 序列"), id="vt", compact=True),
+        _CircleCheckbox(tr("16 进制接收/发送（HEX）"), id="hex", compact=True),
     ]
 
 
@@ -69,27 +80,27 @@ class _OptionsRich(Vertical):
     """Full layout: dense multi-row form inside a centred box."""
 
     def compose(self) -> ComposeResult:
-        yield Static("选项设置", id="options-title")
+        yield Static(tr("选项设置"), id="options-title")
         with VerticalScroll(id="options-body"):
             yield from _circle_fields()
             with Horizontal(classes="form-row"):
-                yield Label("回车发送", classes="form-label")
-                yield FieldSelect(_ENTER_OPTIONS, id="enter", allow_blank=False, compact=True)
-                yield Label("退格发送", classes="form-label")
-                yield FieldSelect(_BACK_OPTIONS, id="back", allow_blank=False, compact=True)
+                yield Label(tr("回车发送"), classes="form-label")
+                yield FieldSelect(_enter_options(), id="enter", allow_blank=False, compact=True)
+                yield Label(tr("退格发送"), classes="form-label")
+                yield FieldSelect(_back_options(), id="back", allow_blank=False, compact=True)
             with Horizontal(classes="form-row"):
-                yield Label("解码字符集", classes="form-label")
-                yield FieldSelect(_DECODE_OPTIONS, id="decode", allow_blank=False, compact=True)
-                yield Label("传输超时(s)", classes="form-label")
+                yield Label(tr("解码字符集"), classes="form-label")
+                yield FieldSelect(_decode_options(), id="decode", allow_blank=False, compact=True)
+                yield Label(tr("传输超时(s)"), classes="form-label")
                 yield Input("", id="timeout", placeholder="10", compact=True)
             with Horizontal(classes="form-row"):
-                yield Label("重试次数", classes="form-label")
+                yield Label(tr("重试次数"), classes="form-label")
                 yield Input("", id="retries", placeholder="10", compact=True)
-                yield Label("数据块", classes="form-label")
+                yield Label(tr("数据块"), classes="form-label")
                 yield Input("", id="blocksize", placeholder="1024 / 128", compact=True)
         with Horizontal(id="options-buttons"):
-            yield Button("保存", id="save", variant="primary", compact=True)
-            yield Button("取消", id="cancel", compact=True)
+            yield Button(tr("保存"), id="save", variant="primary", compact=True)
+            yield Button(tr("取消"), id="cancel", compact=True)
 
 
 class _OptionsCompact(Vertical):
@@ -97,31 +108,33 @@ class _OptionsCompact(Vertical):
     row, inside a scroll area so very short windows stay usable."""
 
     def compose(self) -> ComposeResult:
-        yield Static("选项设置", id="options-title")
+        yield Static(tr("选项设置"), id="options-title")
         with VerticalScroll(id="options-body"):
             yield from _circle_fields()
             yield from _field_row(
-                "回车发送", FieldSelect(_ENTER_OPTIONS, id="enter", allow_blank=False, compact=True)
+                tr("回车发送"),
+                FieldSelect(_enter_options(), id="enter", allow_blank=False, compact=True),
             )
             yield from _field_row(
-                "退格发送", FieldSelect(_BACK_OPTIONS, id="back", allow_blank=False, compact=True)
+                tr("退格发送"),
+                FieldSelect(_back_options(), id="back", allow_blank=False, compact=True),
             )
             yield from _field_row(
-                "解码字符集",
-                FieldSelect(_DECODE_OPTIONS, id="decode", allow_blank=False, compact=True),
+                tr("解码字符集"),
+                FieldSelect(_decode_options(), id="decode", allow_blank=False, compact=True),
             )
             yield from _field_row(
-                "传输超时(s)", Input("", id="timeout", placeholder="10", compact=True)
+                tr("传输超时(s)"), Input("", id="timeout", placeholder="10", compact=True)
             )
             yield from _field_row(
-                "重试次数", Input("", id="retries", placeholder="10", compact=True)
+                tr("重试次数"), Input("", id="retries", placeholder="10", compact=True)
             )
             yield from _field_row(
-                "数据块", Input("", id="blocksize", placeholder="1024 / 128", compact=True)
+                tr("数据块"), Input("", id="blocksize", placeholder="1024 / 128", compact=True)
             )
         with Horizontal(id="options-buttons"):
-            yield Button("保存", id="save", variant="primary", compact=True)
-            yield Button("取消", id="cancel", compact=True)
+            yield Button(tr("保存"), id="save", variant="primary", compact=True)
+            yield Button(tr("取消"), id="cancel", compact=True)
 
 
 class OptionsScreen(AdaptiveModal):
@@ -151,13 +164,11 @@ class OptionsScreen(AdaptiveModal):
         self.query_one("#hex", Checkbox).value = cfg.hex_mode
         # 下拉框：仅当配置值合法时才选中它，否则回退到第一个选项
         enter = self.query_one("#enter", FieldSelect)
-        enter.value = cfg.enter_sends if cfg.enter_sends in _ENTER_VALUES else _ENTER_OPTIONS[0][1]
+        enter.value = cfg.enter_sends if cfg.enter_sends in _ENTER_VALUES else "cr"
         back = self.query_one("#back", FieldSelect)
-        back.value = (
-            cfg.backspace_sends if cfg.backspace_sends in _BACK_VALUES else _BACK_OPTIONS[0][1]
-        )
+        back.value = cfg.backspace_sends if cfg.backspace_sends in _BACK_VALUES else "del"
         decode = self.query_one("#decode", FieldSelect)
-        decode.value = cfg.decode if cfg.decode in _DECODE_VALUES else _DECODE_OPTIONS[0][1]
+        decode.value = cfg.decode if cfg.decode in _DECODE_VALUES else "utf-8"
         self.query_one("#timeout", Input).value = str(cfg.xfer_timeout)
         self.query_one("#retries", Input).value = str(cfg.xfer_retries)
         self.query_one("#blocksize", Input).value = str(cfg.xfer_block_size)

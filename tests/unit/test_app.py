@@ -226,7 +226,7 @@ async def test_help_menu_arrows_select_and_enter_runs():
         await pilot.pause()
         app.push_screen(MainMenuScreen())
         await pilot.pause(0.2)
-        assert app.focused.id == "menu-z", "first menu item should be focused"
+        assert app.focused.id == "menu-p", "first menu item should be focused"
 
         # navigate down to the "选项设置" row and activate it with Enter
         while app.focused.id != "menu-o":
@@ -1309,8 +1309,9 @@ async def test_paste_event_sends_to_port():
 
 
 async def test_main_menu_shows_about_and_clean_copy():
-    """菜单底部显示版本/作者/GitHub，条目去掉冗余括号说明（仅保留 YMODEM）。"""
+    """功能菜单条目去掉冗余括号说明；关于信息移入“关于”页面。"""
     from pycom import PROJECT_AUTHOR, PROJECT_URL, __version__
+    from pycom.screens.about import AboutScreen
     from pycom.screens.help import MainMenuScreen
 
     app = PyComApp()
@@ -1319,17 +1320,22 @@ async def test_main_menu_shows_about_and_clean_copy():
         app.push_screen(MainMenuScreen())
         await pilot.pause(0.2)
         scr = app.screen_stack[-1]
-        assert str(scr.query_one("#help-repo").render()) == PROJECT_URL
-        about = str(scr.query_one("#help-about").render())
-        assert __version__ in about and PROJECT_AUTHOR in about
-        # 不再出现冗余括号说明；(YMODEM) 仅在 发送/接收 两项保留
-        plain = ("z", "c", "l", "h", "p", "o", "x")
-        for key in plain:
+        # 关于信息不再停留在主菜单底部（已移入关于页）
+        assert len(scr.query("#help-about")) == 0
+        assert len(scr.query("#help-repo")) == 0
+        # 主菜单不再包含“主菜单”自引用项（z 已移除）
+        assert len(scr.query("#menu-z")) == 0
+        # 所有主菜单条目不含冗余括号说明
+        for key in ("p", "d", "c", "h", "l", "o", "y", "a", "x"):
             label = str(scr.query_one(f"#menu-{key}").render())
             assert "（" not in label and "(" not in label and ")" not in label
-        for key in ("s", "r"):
-            label = str(scr.query_one(f"#menu-{key}").render())
-            assert "（" not in label and "YMODEM" in label
+
+        # 关于页面承载项目信息（版本/作者/主页/协议）
+        app.push_screen(AboutScreen())
+        await pilot.pause(0.2)
+        about = str(app.screen_stack[-1].query_one("#help-body Static").render())
+        assert __version__ in about and PROJECT_AUTHOR in about
+        assert PROJECT_URL in about and "MIT" in about
 
 
 async def test_main_menu_back_button_bottom_left_closes():
@@ -1345,10 +1351,10 @@ async def test_main_menu_back_button_bottom_left_closes():
         back = scr.query_one("#menu-back")
         assert "返回" in str(back.render())
         box = scr.query_one("#help-box")
-        repo = scr.query_one("#help-repo")
+        footer = scr.query_one("#help-footer")
         # 位于菜单框底部、与底部文案同一左缘（左下角）
-        assert back.region.y >= repo.region.y
-        assert back.region.x == repo.region.x
+        assert back.region.y >= footer.region.y
+        assert back.region.x == footer.region.x
         assert back.region.right <= box.region.right
 
         await pilot.click("#menu-back")
@@ -1426,7 +1432,7 @@ async def test_help_menu_compact_on_small_window_stays_usable():
         assert root.region.right <= scr.size.width
         assert root.region.bottom <= scr.size.height
         # first item focused; arrows reach the last one (menu scrolls into view)
-        assert app.focused.id == "menu-z"
+        assert app.focused.id == "menu-p"
         for _ in range(8):
             await pilot.press("down")
             await pilot.pause(0.01)
