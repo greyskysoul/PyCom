@@ -176,6 +176,11 @@ Vertical#options-box, Vertical#conn-box {
     max-width: 80;
 }
 
+/* 发送/接收界面盒体稍宽，让路径/目录输入框更宽敞 */
+Vertical#xfer-box {
+    max-width: 100;
+}
+
 /* --- help / main menu --------------------------------------------------------- */
 #help-box {
     max-width: 66;
@@ -395,6 +400,22 @@ Vertical#options-box, Vertical#conn-box {
     height: auto;
 }
 
+/* 发送/接收界面：路径/目录/文件名输入框单行并占满剩余宽度 */
+#xfer-box .form-row Input {
+    width: 1fr;
+    height: 1;
+    background: #232b40;
+    color: #dce2ec;
+    padding: 0 1;
+    border: none;
+    margin: 0;
+}
+
+#xfer-box .form-row Input:focus {
+    background: #2f3a58;
+    border: none;
+}
+
 #xfer-state {
     height: auto;
     margin-top: 1;
@@ -407,8 +428,39 @@ Vertical#options-box, Vertical#conn-box {
     border: ascii #2a3142;
 }
 
+#picker-tree DataTable {
+    height: 1fr;
+}
+
+#picker-nav {
+    height: auto;
+    margin-top: 1;
+}
+
+#picker-nav Button {
+    /* 后退/前进/home// 四个按钮：尽量短但宽度一致 */
+    min-width: 8;
+    margin-right: 1;
+}
+
+#picker-buttons Button {
+    /* 底部动作按钮宽度一致，避免一个长一个短 */
+    min-width: 16;
+    margin-right: 1;
+}
+
 #picker-path {
-    color: #8b949e;
+    height: 1;
+    margin-top: 1;
+    background: #232b40;
+    color: #dce2ec;
+    padding: 0 1;
+    border: none;
+}
+
+#picker-path:focus {
+    background: #2f3a58;
+    border: none;
 }
 
 #confirm {
@@ -545,6 +597,22 @@ Vertical#confirm.compact {
     margin: 0;
     border: none;
     background: #141b2c;
+}
+
+/* 文件/目录选择器与协议选择器：小窗口时切换为整宽紧凑布局 */
+Vertical#picker-box.compact {
+    width: 100%;
+    max-width: 100%;
+    height: 1fr;
+    max-height: 100%;
+    margin: 0;
+    padding: 0 1;
+    border: none;
+    background: #141b2c;
+}
+
+Vertical#picker-box.compact #picker-tree {
+    height: 1fr;
 }
 
 /* 功能菜单紧凑布局：占满整屏，标题/提示固定，字段区占满剩余空间并允许滚动；

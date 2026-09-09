@@ -269,6 +269,285 @@ async def test_confirm_dialog_arrows_move_between_buttons():
         assert app.focused.id == "no"
 
 
+async def test_ctrl_a_s_chooses_protocol_then_sends():
+    """Ctrl+A S 先打开协议选择（YMODEM/ZMODEM），选定后再进入发送界面。"""
+    from pycom.screens.transfer import ProtocolPicker, SendScreen
+
+    app = PyComApp()
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        assert app.open_loopback() is None
+        await pilot.press("ctrl+a")
+        await pilot.press("s")
+        await pilot.pause(0.3)
+        assert isinstance(app.screen_stack[-1], ProtocolPicker)
+        await pilot.click("#zmodem")
+        await pilot.pause(0.3)
+        assert isinstance(app.screen_stack[-1], SendScreen)
+        assert app.screen_stack[-1].protocol == "zmodem"
+
+
+async def test_ctrl_a_r_chooses_protocol_then_receives():
+    """Ctrl+A R 先选择协议（含 ZMODEM 接收），选定后再进入接收界面。"""
+    from pycom.screens.transfer import ProtocolPicker, RecvScreen
+
+    app = PyComApp()
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        assert app.open_loopback() is None
+        await pilot.press("ctrl+a")
+        await pilot.press("r")
+        await pilot.pause(0.3)
+        assert isinstance(app.screen_stack[-1], ProtocolPicker)
+        await pilot.click("#ymodem")
+        await pilot.pause(0.3)
+        assert isinstance(app.screen_stack[-1], RecvScreen)
+        assert app.screen_stack[-1].protocol == "ymodem"
+
+
+async def test_ctrl_a_s_cancel_opens_nothing():
+    """协议选择页取消后不进入任何发送/接收界面。"""
+    from pycom.screens.transfer import ProtocolPicker
+
+    app = PyComApp()
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        assert app.open_loopback() is None
+        await pilot.press("ctrl+a")
+        await pilot.press("s")
+        await pilot.pause(0.3)
+        assert isinstance(app.screen_stack[-1], ProtocolPicker)
+        await pilot.press("escape")
+        await pilot.pause(0.3)
+        assert len(app.screen_stack) == 1
+
+
+async def test_path_picker_up_entry_and_navigation():
+    """文件选择器：列表顶部有 '..' 可返回上一级，无“上一级”按钮。"""
+    import os
+    import tempfile
+
+    from pycom.screens.filepicker import PathPicker
+
+    root = tempfile.mkdtemp()
+    sub = os.path.join(root, "subdir")
+    os.makedirs(sub)
+    with open(os.path.join(sub, "data.bin"), "wb") as fh:
+        fh.write(b"x")
+
+    app = PyComApp()
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        app.push_screen(PathPicker(sub, pick_files=True))
+        await pilot.pause(0.3)
+        scr = app.screen_stack[-1]
+        assert len(scr.query("#up")) == 0  # 上一级按钮已移除
+        table = scr.query_one("#picker-table")
+        keys = {str(k.value) for k in table.rows}
+        assert "__up__" in keys
+        # 聚焦在第一行（'..'），回车返回上一级
+        await pilot.press("enter")
+        await pilot.pause(0.3)
+        assert app.screen_stack[-1]._cur == os.path.abspath(root)
+
+
+async def test_path_picker_hides_up_at_root():
+    """文件选择器：文件系统根目录不显示 '..'（Windows 为“我的电脑”盘符视图）。"""
+    import os
+
+    from pycom.screens.filepicker import PathPicker
+
+    app = PyComApp()
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        app.push_screen(PathPicker(os.path.abspath(os.sep), pick_files=True))
+        await pilot.pause(0.3)
+        scr = app.screen_stack[-1]
+        if os.name == "nt":
+            # Windows 盘符根目录：“..”回到“我的电脑”，根视图无 “..”
+            await pilot.click("#root")
+            await pilot.pause(0.3)
+            table = scr.query_one("#picker-table")
+            keys = {str(k.value) for k in table.rows}
+            assert "__up__" not in keys
+        else:
+            table = scr.query_one("#picker-table")
+            keys = {str(k.value) for k in table.rows}
+            assert "__up__" not in keys
+
+
+async def test_path_picker_drives_only_in_my_computer():
+    """Windows：盘符根目录正常列出文件（无盘符），只有“我的电脑”视图才只显示盘符。"""
+    import os
+
+    from pycom.screens.filepicker import PathPicker
+
+    if os.name != "nt":
+        return  # Windows 专属
+    app = PyComApp()
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        app.push_screen(PathPicker(os.path.abspath(os.sep), pick_files=True))
+        await pilot.pause(0.3)
+        scr = app.screen_stack[-1]
+        # C:\ 盘符根目录：不显示盘符，显示 “..” 与正常内容
+        table = scr.query_one("#picker-table")
+        keys = {str(k.value) for k in table.rows}
+        assert not any(k.startswith("drive:") for k in keys)
+        assert "__up__" in keys
+        # “..” 回到“我的电脑”，只显示盘符
+        await pilot.press("enter")
+        await pilot.pause(0.3)
+        table = scr.query_one("#picker-table")
+        keys = [str(k.value) for k in table.rows]
+        assert keys and all(k.startswith("drive:") for k in keys)
+        # 选择第一个盘符进入该盘（表格按 A-Z 顺序列出）
+        first = keys[0][len("drive:") :]
+        await pilot.press("enter")
+        await pilot.pause(0.3)
+        assert scr._cur == os.path.abspath(first)
+
+
+async def test_path_picker_compact_on_small_window():
+    """文件选择器在小窗口下切换为紧凑整屏布局。"""
+    import tempfile
+
+    from pycom.screens.filepicker import PathPicker
+
+    app = PyComApp()
+    async with app.run_test(size=(40, 12)) as pilot:
+        await pilot.pause()
+        app.push_screen(PathPicker(tempfile.mkdtemp(), pick_files=True))
+        await pilot.pause(0.3)
+        assert app.screen_stack[-1].query_one("#picker-box").has_class("compact")
+
+
+async def test_path_picker_address_input_jumps():
+    """地址栏输入路径并回车，跳转到该目录。"""
+    import os
+    import tempfile
+
+    from pycom.screens.filepicker import PathPicker
+
+    root = tempfile.mkdtemp()
+    sub = os.path.join(root, "subdir")
+    os.makedirs(sub)
+
+    app = PyComApp()
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        app.push_screen(PathPicker(root, pick_files=True))
+        await pilot.pause(0.3)
+        scr = app.screen_stack[-1]
+        inp = scr.query_one("#picker-path")
+        inp.focus()
+        inp.value = sub
+        await pilot.pause(0.1)
+        await pilot.press("enter")
+        await pilot.pause(0.3)
+        assert scr._cur == os.path.abspath(sub)
+        # 地址栏同步为当前目录
+        assert scr.query_one("#picker-path").value == os.path.abspath(sub)
+
+
+async def test_path_picker_home_and_root_buttons():
+    """home 与 / 按钮快速跳转到用户主目录与根目录。"""
+    import os
+    import tempfile
+
+    from pycom.screens.filepicker import PathPicker
+
+    app = PyComApp()
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        app.push_screen(PathPicker(tempfile.mkdtemp(), pick_files=True))
+        await pilot.pause(0.3)
+        scr = app.screen_stack[-1]
+        await pilot.click("#root")
+        await pilot.pause(0.3)
+        if os.name == "nt":
+            assert scr._cur == ""  # Windows 根 = “我的电脑”（盘符视图）
+        else:
+            assert scr._cur == os.path.abspath(os.sep)
+        await pilot.click("#home")
+        await pilot.pause(0.3)
+        assert scr._cur == os.path.abspath(os.path.expanduser("~"))
+
+
+async def test_path_picker_back_forward_history():
+    """后退/前进按钮按文件管理器习惯在浏览历史中移动。"""
+    import os
+    import tempfile
+
+    from pycom.screens.filepicker import PathPicker
+
+    root = tempfile.mkdtemp()
+    sub = os.path.join(root, "sub")
+    os.makedirs(sub)
+
+    app = PyComApp()
+    async with app.run_test(size=(100, 40)) as pilot:
+        await pilot.pause()
+        app.push_screen(PathPicker(root, pick_files=True))
+        await pilot.pause(0.3)
+        scr = app.screen_stack[-1]
+        # 初始：无历史，后退/前进均不可用
+        assert scr.query_one("#back").disabled is True
+        assert scr.query_one("#forward").disabled is True
+        # 进入子目录（表格第 1 行 = 目录，先向下再回车）
+        await pilot.press("down")
+        await pilot.press("enter")
+        await pilot.pause(0.3)
+        assert scr._cur == os.path.abspath(sub)
+        assert scr.query_one("#back").disabled is False
+        # 后退回根目录，前进重新可用
+        await pilot.click("#back")
+        await pilot.pause(0.3)
+        assert scr._cur == os.path.abspath(root)
+        assert scr.query_one("#forward").disabled is False
+        # 前进回到子目录
+        await pilot.click("#forward")
+        await pilot.pause(0.3)
+        assert scr._cur == os.path.abspath(sub)
+
+
+async def test_path_picker_nav_buttons_short_and_uniform():
+    """后退/前进/home// 四个导航按钮：宽度一致且尽量短。"""
+    import tempfile
+
+    from pycom.screens.filepicker import PathPicker
+
+    app = PyComApp()
+    async with app.run_test(size=(110, 40)) as pilot:
+        await pilot.pause()
+        app.push_screen(PathPicker(tempfile.mkdtemp(), pick_files=True))
+        await pilot.pause(0.3)
+        scr = app.screen_stack[-1]
+        widths = {
+            bid: scr.query_one(f"#{bid}").region.width
+            for bid in ("back", "forward", "home", "root")
+        }
+        assert len(set(widths.values())) == 1, f"导航按钮宽度不一致: {widths}"
+        assert next(iter(widths.values())) < 16, f"导航按钮过宽: {widths}"
+
+
+async def test_send_screen_path_input_is_single_line_and_wide():
+    """发送界面路径输入框：单行（高度 1）且占满整行宽度。"""
+    from pycom.screens.transfer import SendScreen
+
+    app = PyComApp()
+    async with app.run_test(size=(110, 30)) as pilot:
+        await pilot.pause()
+        app.push_screen(SendScreen("ymodem"))
+        await pilot.pause(0.3)
+        scr = app.screen_stack[-1]
+        inp = scr.query_one("#file")
+        assert inp.region.height == 1  # 单行
+        assert inp.region.width >= 55  # 足够宽
+        # 与浏览按钮同一行、未换行
+        assert inp.region.y == scr.query_one("#browse").region.y
+
+
 async def test_datatable_arrows_step_one_row_at_a_time():
     """Regression: arrow keys used to skip every other DataTable row."""
     from pycom.screens.connection import ConnectionScreen
@@ -991,6 +1270,13 @@ def test_cli_hex_flag_parsed():
 
     assert _parse_args(["--hex"]).hex is True
     assert _parse_args([]).hex is False
+
+
+def test_cli_no_mouse_flag_parsed():
+    from pycom.app import _parse_args
+
+    assert _parse_args(["--no-mouse"]).no_mouse is True
+    assert _parse_args([]).no_mouse is False
 
 
 def test_cli_enable_debug_parsed_and_hidden_from_help(capsys):

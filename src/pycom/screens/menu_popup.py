@@ -95,6 +95,14 @@ class MainMenuPopup(Container):
             event.stop()
             self._move(event.key == "down")
             return
+        if event.key == "enter":
+            # 直接激活当前高亮项：不依赖 Button 绑定的 enter 键（某些终端/
+            # 场景下 Button 的 enter 绑定可能未被触发），保证回车必定生效。
+            event.stop()
+            code = self._focused_code()
+            if code in self._codes():
+                self._pick(code)
+            return
         char = (event.character or "").lower()
         if not char:
             return
@@ -105,6 +113,13 @@ class MainMenuPopup(Container):
                 return
         # Consume everything else so it never leaks to the terminal while open.
         event.stop()
+
+    def _focused_code(self) -> str:
+        """The action code of the currently highlighted menu item ('' if none)."""
+        for item in self.query(".menu-item"):
+            if item.has_focus:
+                return (item.id or "").removeprefix("menu-")
+        return ""
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         code = (event.button.id or "").removeprefix("menu-")

@@ -39,7 +39,7 @@ from pycom.screens.connection import ConnectionScreen
 from pycom.screens.language import LanguageScreen
 from pycom.screens.menu_popup import MainMenuPopup
 from pycom.screens.options import OptionsScreen
-from pycom.screens.transfer import RecvScreen, SendScreen
+from pycom.screens.transfer import VALID_PROTOCOLS, ProtocolPicker, RecvScreen, SendScreen
 from pycom.screens.transfermenu import TransferMenuScreen
 from pycom.serialio import SerialManager
 from pycom.termdisplay.view import HexAsciiPane, StatusBar, TerminalView
@@ -204,9 +204,8 @@ class _StatusMenuButton(Button, can_focus=False):
 _PREFIX_FUNCS = {
     "z": "主菜单",
     "p": "串口参数",
-    "s": "发送文件",
-    "r": "接收文件",
-    "u": "发送文件(ZMODEM)",
+    "s": "选择发送协议",
+    "r": "选择接收协议",
     "c": "清屏",
     "h": "16进制 开/关",
     "l": "捕获开/关",
@@ -836,11 +835,11 @@ class PyComApp(App):
         elif code == "d":
             self.push_screen(TransferMenuScreen())
         elif code == "s":
-            self.open_send("ymodem")
+            # 先选择协议（YMODEM / ZMODEM），再进入发送界面
+            self.push_screen(ProtocolPicker(tr("选择发送协议")), callback=self._send_protocol)
         elif code == "r":
-            self.open_recv("ymodem")
-        elif code == "u":
-            self.open_send("zmodem")
+            # 先选择协议（YMODEM / ZMODEM），再进入接收界面
+            self.push_screen(ProtocolPicker(tr("选择接收协议")), callback=self._recv_protocol)
         elif code == "x":
             self.push_screen(
                 ConfirmDialog(tr("退出"), tr("确定要退出 PyCom 吗？")),
@@ -867,6 +866,16 @@ class PyComApp(App):
             self.push_screen(LanguageScreen())
         elif code == "a":
             self.push_screen(AboutScreen())
+
+    def _send_protocol(self, protocol: str | None) -> None:
+        """ProtocolPicker result -> open the send dialog for that protocol."""
+        if protocol in VALID_PROTOCOLS:
+            self.open_send(protocol)
+
+    def _recv_protocol(self, protocol: str | None) -> None:
+        """ProtocolPicker result -> open the receive dialog for that protocol."""
+        if protocol in VALID_PROTOCOLS:
+            self.open_recv(protocol)
 
     def open_send(self, protocol: str = "ymodem") -> None:
         """Open the send dialog for ``protocol`` (ymodem | zmodem)."""
@@ -1186,9 +1195,11 @@ def _parse_args(argv):
             '  pycom -p COM3 -s "AT\\r"\n'
             "  pycom -p COM3 -f boot.txt -e 5\n"
             "  pycom -p COM3 --hex\n"
+            "  pycom -p COM3 --no-mouse\n"
             "  pycom --bare -p COM3 -b 115200   # 无界面纯直通：stdin→串口，串口→stdout\n"
             "\n"
-            "-s/-f 内容支持 \\n \\r \\t \\xHH 等转义；-e 支持小数秒。"
+            "-s/-f 内容支持 \\n \\r \\t \\xHH 等转义；-e 支持小数秒；--no-mouse 关闭鼠标捕获，"
+            "把滚轮/点击交还宿主终端。\n"
             "--bare 隐藏全部界面，仅供外部进程（如 AI agent）通过标准输入输出驱动。"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -1236,6 +1247,13 @@ def _parse_args(argv):
         help=tr("空闲自动退出：连续 SECS 秒未收到任何字节"),
     )
     startup.add_argument("--hex", action="store_true", help=tr("启动即开启 16 进制接收/发送"))
+
+    ui = parser.add_argument_group(tr("界面选项"))
+    ui.add_argument(
+        "--no-mouse",
+        action="store_true",
+        help=tr("禁用鼠标捕获：终端不再上报鼠标，滚轮/点击由宿主终端自身处理"),
+    )
 
     bridge = parser.add_argument_group(tr("直通模式（--bare，无界面）"))
     bridge.add_argument(
@@ -1384,7 +1402,7 @@ def main(argv=None) -> int:
         sys.stderr.write(_too_small_message(cols, rows))
         return 1
 
-    result = app.run()
+    result = app.run(mouse=not args.no_mouse)
     if result == _EXIT_TOO_SMALL:  # 运行中窗口被缩到过小
         w, h = app._too_small_size
         sys.stderr.write(_too_small_message(w, h))

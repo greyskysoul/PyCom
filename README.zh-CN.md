@@ -42,6 +42,7 @@
 - **全屏终端界面**：设备 ANSI/VT 输出正确渲染、可滚动回看。
 - **Ctrl+A 前缀键 + 弹层菜单**（minicom 交互习惯）。
 - **YMODEM 发送 / 接收**：CRC-16-CCITT、128/1024 字节块可配置、超时重传、进度显示、可取消。
+- **ZMODEM 传输**：与 lrzsz 兼容的协议引擎（通过 `Ctrl+A` `S`/`R` 选择）。
 - 端口/波特率等参数随时可改、配置持久化。
 - 会话捕获（log）、本地回显、行尾转换、HEX 显示等选项。
 - 弹层（菜单 / 连接 / 选项 / 确认对话框）自动适配小窗口（紧凑整屏布局）。
@@ -80,6 +81,8 @@ pycom -p COM3 -f boot.txt
 pycom -p COM3 -s "AT\r" -e 5
 # 启动后自动开启 16 进制接收/发送模式（HEX）
 pycom -p COM3 --hex
+# 关闭鼠标捕获（滚轮/点击交给宿主终端自身处理）
+pycom -p COM3 --no-mouse
 # 无界面纯串口直通（--bare）：隐藏全部界面，必须指定端口。
 # stdin 字节→串口发送，串口 RX 原样打到 stdout，适合把终端交给 AI agent 等进程：
 pycom --bare -p COM3 -b 115200
@@ -95,24 +98,30 @@ pycom --bare -p COM3 -b 115200
 
 | 按键 | 功能 |
 | ---------- | ------------------------------- |
-| `Ctrl+A` `Z` | 打开主菜单 / 帮助 |
-| `Ctrl+A` `X` | 退出 |
-| `Ctrl+A` `S` | 发送文件（YMODEM） |
-| `Ctrl+A` `R` | 接收文件（YMODEM） |
+| `Ctrl+A` `Z` | 打开主菜单（浮动弹层） |
+| `Ctrl+A` `P` | 串口参数（连接设置） |
+| `Ctrl+A` `S` | 发送文件（先选择 YMODEM/ZMODEM） |
+| `Ctrl+A` `R` | 接收文件（先选择 YMODEM/ZMODEM） |
 | `Ctrl+A` `L` | 会话捕获开关 |
 | `Ctrl+A` `C` | 清屏 |
-| `Ctrl+A` `P` | 串口参数（连接设置） |
-| `Ctrl+A` `O` | 选项 |
 | `Ctrl+A` `H` | 16 进制接收/发送（HEX）开关 |
+| `Ctrl+A` `O` | 选项 |
+| `Ctrl+A` `Y` | 语言 |
+| `Ctrl+A` `A` | 关于 |
+| `Ctrl+A` `X` | 退出 |
 | `Esc`（前缀中） | 取消前缀 |
 
 > 本地回显、自动回绕等开关集中在 `Ctrl+A` `O` 的选项弹层中设置（默认关闭），
 > 不再占用前缀快捷键。
 >
-> **HEX 模式**（`Ctrl+A H` 或选项页开关，可持久化）：收到的字节以十六进制文本显示；
-> 底部出现多行 16 进制输入区（只接受合法字符，自动按字节加空格，并按窗口宽度每行
-> 排 4/8/16 字节），主界面按键不再直接发送，必须点击底部“发送”按钮才把输入解析
-> 为字节发出；用快捷键开启后会自动聚焦输入区。
+> **HEX 模式**（`Ctrl+A H`，可持久化）：收到的字节以十六进制文本显示在左侧，
+> 右侧分栏显示 ASCII —— 可打印字符原样显示，其余为灰色圆点；底部出现多行
+> 16 进制输入区（只接受合法字符，自动按字节加空格，并按窗口宽度每行排 4/8/16/32
+> 字节）。主界面按键不再直接发送——在输入区按 `Enter`（或点击底部“发送”按钮）
+> 即可把输入解析为字节发出；用快捷键开启后会自动聚焦输入区。
+>
+> **鼠标捕获**默认开启（滚动回看与应用内选中需要它）；用 `--no-mouse` 启动则把
+> 滚轮/点击交还给宿主终端。
 >
 > **虚拟回环设备**（调试）：用 `--enable-debug` 启动后，`Ctrl+A P` 连接页端口列表
 > 末尾会出现 `LOOPBACK`，无需真实串口，所有发送的字节会原样回显（纯回环），
@@ -154,6 +163,8 @@ CI（`.github/workflows/ci.yml`）在 Windows / Ubuntu 双平台跑 lint/类型/
 - **pyte** — 设备 RX 字节流的 VT 终端模拟（子类化其 `Screen` 捕获滚出内容实现回看；LGPLv3）
 - **自研 YMODEM 引擎**（`xfer/ymodem.py`）：CRC-16-CCITT、SOH/STX、128/1024 块、
   超时/重传可配置、重复块容忍、CAN-CAN 中止、坏块自动重传、进度回调
+- **自研 ZMODEM 引擎**（`xfer/zmodem.py`）：ZRQINIT/ZRINIT/ZFILE/ZDATA 握手、
+  十六进制控制帧 + 二进制数据子包（ZCRCW/ZACK）、单文件会话
 - 打包：PyInstaller；测试：pytest（含 Textual Pilot 无头 UI 测试）、ruff、mypy
 
 ## 目录结构
@@ -168,6 +179,7 @@ src/pycom/
     vt.py             pyte 终端模型（解码、滚动历史、resize）
     view.py           TerminalView / StatusBar 控件
   xfer/ymodem.py      YMODEM 双向协议引擎（纯 Python、可脱离串口单测）
+  xfer/zmodem.py      ZMODEM 传输引擎（纯 Python、可脱离串口单测）
   screens/            连接、主菜单、选项、文件/目录选择、收发传输界面
   resources/app.tcss  主题
 tests/unit/           CRC/帧/block0、引擎回环(含错误注入)、按键、终端模型、Pilot UI
@@ -181,15 +193,16 @@ packaging/            PyInstaller 启动器与 spec
 
 ## 已知范围（Roadmap）
 
-- v1 已含：YMODEM 双向收发、捕获日志、行尾/回显/解码/流控配置、滚动回看、HEX 无需渲染
-- v1 不含：XMODEM/ZMODEM/Kermit、ASCII 发送、宏脚本、拨号目录、分屏多会话
+- v1 已含：YMODEM 双向收发、ZMODEM 传输、捕获日志、行尾/回显/解码/流控配置、滚动回看、HEX 渲染
+- v1 不含：XMODEM/Kermit、ASCII 发送、宏脚本、拨号目录、分屏多会话
 - 建议在 **Windows Terminal** 下运行（完整支持 ConPTY/颜色）
 
 ## 实测建议
 
 1. Linux 与 lrzsz 交叉验证：`sz -Y file` 对 PyCom 接收；`rz -Y` 对 PyCom 发送
-2. Windows/Linux 双端可用 socat(pty)/com0com 虚拟串口做端到端回环
-3. STM32 bootloader 实机烧录建议 115200/921600 各验证一次大文件（SHA256 比对）
+2. ZMODEM：用 lrzsz 的 `rz` 接收 PyCom 通过 `Ctrl+A` `S`（选 ZMODEM）发送的文件
+3. Windows/Linux 双端可用 socat(pty)/com0com 虚拟串口做端到端回环
+4. STM32 bootloader 实机烧录建议 115200/921600 各验证一次大文件（SHA256 比对）
 
 ## AI 声明
 

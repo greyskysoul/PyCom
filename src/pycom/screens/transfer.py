@@ -13,7 +13,7 @@ from textual.events import Key
 from textual.widgets import Button, Input, Label, Static
 
 from pycom.i18n import tr
-from pycom.screens.base import ModalBase
+from pycom.screens.base import ModalBase, ResponsiveCompact
 from pycom.screens.filepicker import PathPicker
 
 _SAFE_NAME = re.compile(r"[^\w.\- ]")
@@ -29,6 +29,43 @@ def sanitize_filename(name: str) -> str:
 
 def _proto_label(protocol: str) -> str:
     return "YMODEM" if protocol != "zmodem" else "ZMODEM"
+
+
+class ProtocolPicker(ResponsiveCompact):
+    """Choose YMODEM / ZMODEM for a send or receive.
+
+    Dismisses with the protocol string (``"ymodem"`` / ``"zmodem"``) or ``None``
+    when cancelled; the app's push_screen callback then opens the matching
+    Send/Receive screen.
+    """
+
+    ROOT_ID = "picker-box"
+    MIN_WIDTH = 40
+    MIN_HEIGHT = 10
+
+    def __init__(self, title: str) -> None:
+        super().__init__()
+        self._title = title
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="picker-box"):
+            yield Static(self._title, id="picker-title")
+            with Horizontal(id="picker-buttons"):
+                yield Button("YMODEM", id="ymodem", compact=True)
+                yield Button("ZMODEM", id="zmodem", compact=True)
+                yield Button(tr("取消"), id="cancel", compact=True)
+
+    def on_mount(self) -> None:
+        super().on_mount()
+        self.query_one("#ymodem", Button).focus()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        bid = event.button.id
+        if bid in ("ymodem", "zmodem"):
+            event.stop()
+            self.dismiss(bid)
+        elif bid == "cancel":
+            self.dismiss(None)
 
 
 class _TransferScreen(ModalBase):

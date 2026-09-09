@@ -42,6 +42,7 @@ Built for embedded firmware flashing (STM32 &amp; other ymodem bootloaders) and 
 - **Full-screen terminal UI** — device ANSI/VT output is rendered correctly, with scrollable history.
 - **Ctrl+A prefix-key + overlay menu** — familiar minicom interaction model.
 - **YMODEM send / receive** — CRC-16-CCITT, configurable 128/1024-byte blocks, timeout retransmission, progress display, cancellable.
+- **ZMODEM transfer** — lrzsz-compatible engine (pick it via `Ctrl+A` `S`/`R`).
 - **Live port / baudrate / parity editing** with persistent configuration.
 - Session capture (logging), local echo, line-ending conversion, HEX display, and more.
 - Overlays (menu / connection / options / confirm dialogs) auto-adapt to small windows (compact full-screen layout).
@@ -80,6 +81,8 @@ pycom -p COM3 -f boot.txt
 pycom -p COM3 -s "AT\r" -e 5
 # start with 16-hex receive/send mode (HEX) enabled
 pycom -p COM3 --hex
+# disable mouse capture (wheel/click is left to the host terminal)
+pycom -p COM3 --no-mouse
 # headless pure serial pass-through (--bare): hides all UI, requires a port.
 # stdin bytes → serial, serial RX → stdout; hand the terminal to an AI agent, etc.:
 pycom --bare -p COM3 -b 115200
@@ -96,29 +99,35 @@ pycom --bare -p COM3 -b 115200
 
 | Keys | Action |
 | ---------- | ------------------------------- |
-| `Ctrl+A` `Z` | Open main menu / help |
-| `Ctrl+A` `X` | Quit |
-| `Ctrl+A` `S` | Send file (YMODEM) |
-| `Ctrl+A` `R` | Receive file (YMODEM) |
+| `Ctrl+A` `Z` | Open the main menu (floating popup) |
+| `Ctrl+A` `P` | Serial parameters (connection) |
+| `Ctrl+A` `S` | Send file (choose YMODEM/ZMODEM first) |
+| `Ctrl+A` `R` | Receive file (choose YMODEM/ZMODEM first) |
 | `Ctrl+A` `L` | Toggle session capture |
 | `Ctrl+A` `C` | Clear screen |
-| `Ctrl+A` `P` | Serial parameters (connection) |
-| `Ctrl+A` `O` | Options |
 | `Ctrl+A` `H` | Toggle 16-hex receive/send (HEX) |
+| `Ctrl+A` `O` | Options |
+| `Ctrl+A` `Y` | Language |
+| `Ctrl+A` `A` | About |
+| `Ctrl+A` `X` | Quit |
 | `Esc` (in prefix) | Cancel prefix |
 
 > Local echo, auto-wrap, etc. live in the `Ctrl+A` `O` options overlay (off by default)
 > rather than occupying prefix shortcuts.
 >
-> **HEX mode** (`Ctrl+A H` or the options page, persistent): received bytes are shown as
-> hex text; a multi-line hex input area appears at the bottom (only valid characters, auto
-> space-separated per byte, wrapping at 4/8/16 bytes per line depending on window width).
-> Keys no longer send directly — click the bottom "Send" button to parse the input as
-> bytes. Toggling via shortcut auto-focuses the input area.
+> **HEX mode** (`Ctrl+A H`, persistent): received bytes are shown as hex text on the left,
+> with a right-hand ASCII pane — printable ASCII as characters, everything else as grey
+> dots. A multi-line hex input area appears at the bottom (only valid characters, auto
+> space-separated per byte, wrapping at 4/8/16/32 bytes per line depending on window width).
+> Keys no longer send directly — press `Enter` in the input area (or click the bottom "Send"
+> button) to parse the input as bytes. Toggling via shortcut auto-focuses the input area.
 >
 > **Virtual loopback device** (debugging): start with `--enable-debug`, then `LOOPBACK`
 > appears at the end of the port list in `Ctrl+A P`. No real port needed — every byte sent
 > is echoed back (pure loopback), ideal for testing TX/RX and HEX display without hardware.
+>
+> **Mouse capture** is on by default (needed for scroll-back and in-app selection); start
+> with `--no-mouse` to hand wheel/click back to the host terminal.
 
 ## Development
 
@@ -158,6 +167,8 @@ creates a GitHub Release from the build artifacts.
 - **pyte** — VT terminal emulation for the device RX byte stream (subclassing its `Screen` to capture scrolled-out content for history; LGPLv3)
 - **In-house YMODEM engine** (`xfer/ymodem.py`): CRC-16-CCITT, SOH/STX, 128/1024 blocks,
   configurable timeout/retry, duplicate-block tolerance, CAN-CAN abort, auto-retransmit on bad block, progress callbacks
+- **In-house ZMODEM engine** (`xfer/zmodem.py`): ZRQINIT/ZRINIT/ZFILE/ZDATA handshake,
+  hex control headers + binary data subpackets with ZCRCW/ZACK, per-file session
 - Packaging: PyInstaller; testing: pytest (including Textual Pilot headless UI tests), ruff, mypy
 
 ## Directory layout
@@ -172,6 +183,7 @@ src/pycom/
     vt.py             pyte terminal model (decode, scroll history, resize)
     view.py           TerminalView / StatusBar widgets
   xfer/ymodem.py      YMODEM bidirectional protocol engine (pure Python, unit-testable without serial)
+  xfer/zmodem.py      ZMODEM transfer engine (pure Python, unit-testable without serial)
   screens/            connection, main menu, options, file/dir picker, transfer screens
   resources/app.tcss  theme
 tests/unit/           CRC/frame/block0, engine loopback (incl. error injection), keys, terminal model, Pilot UI
@@ -185,15 +197,16 @@ The config file is JSON (`%APPDATA%\pycom\config.json` on Windows /
 
 ## Known scope (Roadmap)
 
-- v1 included: YMODEM bidirectional transfer, capture log, line-ending/echo/decode/flow config, scrollback, HEX rendering
-- v1 not included: XMODEM/ZMODEM/Kermit, ASCII send, macro scripts, dialing directory, split-pane multi-session
+- v1 included: YMODEM bidirectional transfer, ZMODEM transfer, capture log, line-ending/echo/decode/flow config, scrollback, HEX rendering
+- v1 not included: XMODEM/Kermit, ASCII send, macro scripts, dialing directory, split-pane multi-session
 - Recommended to run under **Windows Terminal** (full ConPTY/color support)
 
 ## Interop testing
 
 1. Cross-validate with lrzsz on Linux: `sz -Y file` to PyCom receive; `rz -Y` to PyCom send
-2. Use socat(pty)/com0com virtual serial ports for end-to-end loopback on Windows/Linux
-3. STM32 bootloader flashing on hardware: verify at 115200/921600 each with a large file (SHA256 compare)
+2. ZMODEM: have lrzsz's `rz` receive a file that PyCom sends (`Ctrl+A` `S`, pick ZMODEM)
+3. Use socat(pty)/com0com virtual serial ports for end-to-end loopback on Windows/Linux
+4. STM32 bootloader flashing on hardware: verify at 115200/921600 each with a large file (SHA256 compare)
 
 ## AI Disclosure
 

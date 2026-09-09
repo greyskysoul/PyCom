@@ -162,6 +162,8 @@ _EN: dict[str, str] = {
     # --- transfer screens ---
     "发送文件": "Send file",
     "接收文件": "Receive file",
+    "选择发送协议": "Choose send protocol",
+    "选择接收协议": "Choose receive protocol",
     "文件": "File",
     "保存目录": "Save to directory",
     "文件名": "File name",
@@ -187,7 +189,7 @@ _EN: dict[str, str] = {
     # --- file picker ---
     "选择文件 / 目录": "Select file / directory",
     "上一级": "Parent",
-    "选择当前目录": "Select current directory",
+    "选择当前目录": "Select folder",
     # --- menus / language / about ---
     "PyCom - Ctrl+A 功能菜单": "PyCom - Ctrl+A menu",
     "主菜单": "Menu",
