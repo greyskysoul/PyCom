@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pycom"
-version = "1.1.0"
+version = "1.1.1"
 description = "A minicom-style cross-platform serial terminal TUI (Windows + Linux) with robust YMODEM file transfer, HEX mode, VT/ANSI rendering, session capture, and a --bare headless pass-through for embedded firmware flashing and everyday serial debugging."
 readme = "README.md"
 requires-python = ">=3.10"
