@@ -17,6 +17,7 @@ import os
 import threading
 import time
 from collections.abc import Callable
+from typing import Optional
 
 from pycom.i18n import tr
 
@@ -32,7 +33,7 @@ C_CHR = 0x43  # 'C'
 _ABORT = object()  # sentinel returned by _wait_for on CAN-CAN
 
 # Progress callback: cb(phase, filename, sent, total)
-ProgressCB = Callable[[str, str, int, int | None], None]
+ProgressCB = Callable[[str, str, int, Optional[int]], None]
 
 
 def crc16(data: bytes, crc: int = 0) -> int:

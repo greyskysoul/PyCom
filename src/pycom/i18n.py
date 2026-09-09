@@ -33,6 +33,14 @@ _current: str = LANG_ZH
 # zh -> en catalog.  Chinese source strings act as keys, so untranslated
 # strings simply fall through to the (Chinese) source text.
 _EN: dict[str, str] = {
+    # --- theme ---
+    "\u4e3b\u9898": "Theme",
+    "\u81ea\u52a8": "Auto",
+    "\u6d45\u8272": "Light",
+    "\u6df1\u8272": "Dark",
+    "\u7ec8\u7aef": "Terminal",
+    "\u5916\u89c2": "Appearance",
+    "\u6587\u4ef6\u4f20\u8f93": "File transfer",
     # --- CLI / argparse ---
     "--bare 直通模式不能与 -s/-f/-e/--hex 等交互启动选项同时使用": (
         "--bare cannot be combined with interactive startup options such as -s/-f/-e/--hex"
@@ -126,7 +134,7 @@ _EN: dict[str, str] = {
     "无法写入 {path}: {err}": "Cannot write {path}: {err}",
     "未选择端口": "No port selected",
     # --- options ---
-    "选项设置": "Options",
+    "设置": "Options",
     "本地回显": "Local echo",
     "自动回绕": "Auto wrap",
     "接收 LF -> CR+LF": "RX LF -> CR+LF",

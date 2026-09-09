@@ -36,6 +36,7 @@ import os
 import threading
 import time
 from collections.abc import Callable
+from typing import Optional
 
 from pycom.i18n import tr
 from pycom.xfer.ymodem import crc16
@@ -82,7 +83,7 @@ _RX_BUFFER = 1024
 _SUBPACKET = 1024
 
 # Progress callback: cb(phase, filename, sent, total)
-ProgressCB = Callable[[str, str, int, int | None], None]
+ProgressCB = Callable[[str, str, int, Optional[int]], None]
 
 
 def _zdle_escape(data: bytes) -> bytes:

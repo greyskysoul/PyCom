@@ -84,6 +84,8 @@ class AppConfig:
     scrollback: int = 4000
     # UI language: "zh" | "en" | "" (= auto: detect the OS language at startup)
     language: str = ""
+    # Color theme: "auto" | "light" | "dark" ("auto" = follow the terminal)
+    theme: str = "auto"
 
 
 def _config_dir() -> str:

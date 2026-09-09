@@ -33,8 +33,8 @@
 
 <p align="center">
   <img src="docs/screenshots/menu.svg" alt="功能菜单弹层" width="45%">
-  <img src="docs/screenshots/options.svg" alt="选项设置" width="45%">
-  <br><sub>Ctrl+A 功能菜单弹层与选项设置</sub>
+  <img src="docs/screenshots/options.svg" alt="设置" width="45%">
+  <br><sub>Ctrl+A 功能菜单弹层与设置</sub>
 </p>
 
 ## 特性

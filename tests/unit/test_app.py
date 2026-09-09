@@ -79,7 +79,7 @@ async def test_tab_in_modal_steps_one_widget_at_a_time():
         scr.query_one("#echo").focus()
         await pilot.pause()
 
-        expected = ["echo", "wrap", "rx_cr", "rx_lf", "ts", "vt"]
+        expected = ["echo", "wrap", "rx_cr", "rx_lf", "vt", "enter"]
 
         visited = []
         for _ in range(len(expected) + 1):
@@ -112,8 +112,8 @@ async def test_arrows_navigate_between_fields_in_modal():
             visited.append(app.focused.id)
             await pilot.press("down")
             await pilot.pause(0.02)
-        # 7 checkboxes first, then the first text field of the row below
-        assert visited == ["echo", "wrap", "rx_cr", "rx_lf", "ts", "vt", "hex", "enter"]
+        # terminal group checkboxes, then its selects, in DOM order
+        assert visited == ["echo", "wrap", "rx_cr", "rx_lf", "vt", "enter", "back", "decode"]
 
 
 async def test_checkbox_toggles_with_left_right_arrows():
@@ -228,7 +228,7 @@ async def test_help_menu_arrows_select_and_enter_runs():
         await pilot.pause(0.2)
         assert app.focused.id == "menu-p", "first menu item should be focused"
 
-        # navigate down to the "选项设置" row and activate it with Enter
+        # navigate down to the "设置" row and activate it with Enter
         while app.focused.id != "menu-o":
             await pilot.press("down")
             await pilot.pause(0.02)
@@ -1479,16 +1479,20 @@ async def test_compact_controls_start_at_the_same_column():
         await pilot.pause(0.4)
         scr = app.screen_stack[-1]
         assert scr.query_one("#options-box").has_class("compact") is True
-        xs = [
-            scr.query_one(f"#{cid}").region.x
-            for cid in ("enter", "back", "decode", "timeout", "retries", "blocksize")
-        ]
-        widths = [
-            scr.query_one(f"#{cid}").region.width
-            for cid in ("enter", "back", "decode", "timeout", "retries", "blocksize")
-        ]
-        assert len(set(xs)) == 1, f"控件左缘未对齐: {xs}"
-        assert len(set(widths)) == 1, f"控件宽度不一致: {widths}"
+        tabs = scr.query_one("#options-body")
+
+        def check(cids):
+            xs = [scr.query_one(f"#{cid}").region.x for cid in cids]
+            widths = [scr.query_one(f"#{cid}").region.width for cid in cids]
+            assert len(set(xs)) == 1, f"控件左缘未对齐: {xs}"
+            assert len(set(widths)) == 1, f"控件宽度不一致: {widths}"
+
+        # 终端 tab（默认活动）内的控件对齐
+        check(("enter", "back", "decode"))
+        # 文件传输 tab
+        tabs.active = "tab-3"
+        await pilot.pause(0.1)
+        check(("timeout", "retries", "blocksize"))
 
 
 async def test_main_menu_popup_usable_on_small_window():
@@ -1848,3 +1852,39 @@ def test_cli_prints_hint_and_returns_1_when_terminal_too_small(monkeypatch, caps
     err = capsys.readouterr().err
     assert rc == 1
     assert "太小" in err
+
+
+def test_parse_osc11_rgb_and_hex():
+    from pycom.app import _parse_osc11
+
+    assert _parse_osc11(b"\x1b]11;rgb:0f0f/1111/1a1a\x1b\\") == (15, 17, 26)
+    assert _parse_osc11(b"\x1b]11;rgb:fff/fff/fff\x07") == (255, 255, 255)
+    assert _parse_osc11(b"\x1b]11;#ffffff\x07") == (255, 255, 255)
+    assert _parse_osc11(b"noise") is None
+    assert _parse_osc11(b"") is None
+
+
+def test_resolve_theme_modes():
+    from pycom.app import PyComApp
+    from pycom.config import AppConfig
+
+    app = PyComApp(cfg=AppConfig(theme="light"))
+    assert app._resolve_theme(None) == "pycom-light"
+    app.cfg.theme = "dark"
+    assert app._resolve_theme(None) == "pycom-dark"
+    app.cfg.theme = "auto"
+    assert app._resolve_theme(True) == "pycom-dark"
+    assert app._resolve_theme(False) == "pycom-light"
+    assert app._resolve_theme(None) == "pycom-dark"
+
+
+async def test_app_registers_themes_and_applies_light():
+    from pycom.app import PyComApp
+    from pycom.config import AppConfig
+
+    app = PyComApp(cfg=AppConfig(theme="light"))
+    async with app.run_test(size=(100, 28)) as pilot:
+        await pilot.pause()
+        assert app.theme == "pycom-light"
+        assert "pycom-dark" in app.available_themes
+        assert "pycom-light" in app.available_themes

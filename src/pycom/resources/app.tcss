@@ -1,6 +1,6 @@
 /* PyCom theme */
 Screen {
-    background: #0f111a;
+    background: $background;
 }
 
 /* --- main layout ---------------------------------------------------------- */
@@ -17,8 +17,8 @@ Screen {
 #term {
     width: 1fr;
     height: 1fr;
-    background: #0b0c12;
-    color: #c9d1d9;
+    background: $term-bg;
+    color: $term-fg;
     padding: 0;
 }
 
@@ -27,9 +27,9 @@ Screen {
 #hex-ascii-pane {
     width: 34;
     height: 1fr;
-    background: #131826;
-    color: #c9d1d9;
-    border-left: ascii #2a3142;
+    background: $hex-bg;
+    color: $term-fg;
+    border-left: ascii $border;
     padding: 0 1;
     overflow: hidden;
 }
@@ -37,14 +37,14 @@ Screen {
 /* 底部一行：状态文字 + 左下角“菜单”按钮（仅鼠标点击，不抢键盘焦点） */
 #bottom {
     height: 1;
-    background: #161b29;
+    background: $panel;
 }
 
 #status {
     width: 1fr;
     height: 1;
-    background: #161b29;
-    color: #8b949e;
+    background: $panel;
+    color: $muted;
     text-style: bold;
     padding: 0 1;
 }
@@ -53,24 +53,48 @@ Screen {
     height: 1;
     min-width: 7;
     border: none;
-    background: #232b40;
-    color: #c9d1d9;
+    background: $menu-btn-bg;
+    color: $menu-btn-fg;
     padding: 0 1;
     margin: 0;
     content-align: left middle;
+    text-style: bold;
 }
 
 #menu-btn:hover,
 #menu-btn:focus {
-    background: #2f3a58;
-    color: #ffffff;
+    background: $menu-btn-hover-bg;
+    color: $menu-btn-fg;
     text-style: bold;
+}
+
+/* 普通按钮：仅微调底色提升对比度（不动边框/布局） */
+Button {
+    background: $button-bg;
+}
+
+/* hover：比常态略浅，提供悬停反馈（App CSS 会覆盖 Textual 默认 hover） */
+Button:hover {
+    background: $hover-bg;
+}
+Input:hover {
+    background: $hover-bg;
+}
+SelectCurrent:hover {
+    background: $hover-bg;
+}
+/* primary 按钮保持蓝色（App CSS 会覆盖 Textual 默认 CSS，需显式恢复） */
+Button.-primary {
+    background: $primary-muted;
+}
+Button.-primary:hover {
+    background: $primary;
 }
 
 /* --- 16 进制接收/发送输入条（仅在 HEX 模式开启时挂载） ----------------------- */
 #hex-bar {
     height: auto;
-    background: #131826;
+    background: $hex-bg;
     border-top: ascii #2a3142;
     padding: 0 1;
 }
@@ -79,14 +103,14 @@ Screen {
 #hex-bar TextArea {
     width: 1fr;
     height: 3;
-    background: #0f1420;
-    color: #dce2ec;
+    background: $hex-input-bg;
+    color: $control-fg;
     border: none;
     padding: 0 1;
 }
 
 #hex-bar TextArea:focus {
-    background: #1a2133;
+    background: $hex-input-focus-bg;
 }
 
 #hex-bar Button {
@@ -103,9 +127,9 @@ Vertical#help-box, Vertical#picker-box, Vertical#confirm {
     max-width: 88;
     height: auto;
     max-height: 90%;
-    background: #1c2233;
+    background: $surface;
     /* ascii 边框：老式 conhost/低版本 PowerShell 也能正确显示 */
-    border: ascii $primary;
+    border: ascii $border;
     padding: 1 2;
     margin: 2 4;
 }
@@ -126,7 +150,7 @@ Static#help-title, Static#picker-title, Static#confirm-title {
 .form-label {
     width: 16;
     content-align: left middle;
-    color: #9da5b4;
+    color: $label;
 }
 
 .form-row Input {
@@ -142,21 +166,28 @@ Static#help-title, Static#picker-title, Static#confirm-title {
     margin: 1 0 0 0;
 }
 
+/* 表头：独立底色 + 加粗，与表体区分 */
+DataTable > .datatable--header {
+    background: $table-header-bg;
+    color: $table-header-fg;
+    text-style: bold;
+}
+
 /* 连接页输入框与选项页一致：单行紧凑、带底色区分字段 */
 #conn-box .form-row Input {
-    background: #232b40;
-    color: #dce2ec;
+    background: $control-bg;
+    color: $control-fg;
     padding: 0 1;
     margin: 0;
 }
 
 #conn-box .form-row Input:focus {
-    background: #2f3a58;
+    background: $control-focus-bg;
     border: none;
 }
 
 #conn-box .form-row Input > .input--placeholder {
-    color: #7b869b;
+    color: $placeholder;
 }
 
 /* 按钮另起一行并左对齐 */
@@ -166,7 +197,7 @@ Static#help-title, Static#picker-title, Static#confirm-title {
 }
 
 #conn-error {
-    color: #ff6b6b;
+    color: $error;
     height: 1;
     margin-top: 1;
 }
@@ -204,8 +235,8 @@ Vertical#xfer-box {
     height: auto;
     max-height: 100%;
     overflow-y: auto;
-    background: #1c2233;
-    border: ascii $primary;
+    background: $surface;
+    border: ascii $border;
     padding: 0 0 1 0;
     margin: 0;
 }
@@ -223,18 +254,18 @@ Vertical#xfer-box {
     padding: 0 2;
     border: none;
     background: transparent;
-    color: #c9d1d9;
+    color: $term-fg;
     text-align: left;
     content-align: left middle;
 }
 
 #menu-popup Button.menu-item:hover {
-    background: #232b40;
+    background: $control-bg;
 }
 
 #menu-popup Button.menu-item:focus {
-    background: #2a3450;
-    color: #e6ebf4;
+    background: $highlight-bg;
+    color: $highlight-fg;
     text-style: bold;
 }
 
@@ -251,23 +282,23 @@ Vertical#xfer-box {
     padding: 0 1;
     border: none;
     background: transparent;
-    color: #c9d1d9;
+    color: $term-fg;
     text-align: left;
     content-align: left middle;
 }
 
 #help-body Button.menu-item:hover {
-    background: #232b40;
+    background: $control-bg;
 }
 
 #help-body Button.menu-item:focus {
-    background: #2a3450;
-    color: #e6ebf4;
+    background: $highlight-bg;
+    color: $highlight-fg;
     text-style: bold;
 }
 
 #help-footer {
-    color: #8b949e;
+    color: $muted;
 }
 
 /* 菜单底部：版本 / 作者 / GitHub 仓库提示 */
@@ -277,7 +308,7 @@ Vertical#xfer-box {
 
 #help-about,
 #help-repo {
-    color: #5f6b7c;
+    color: $faint;
 }
 
 /* 菜单左下角“返回”按钮 */
@@ -294,7 +325,17 @@ Vertical#xfer-box {
 }
 
 #options-body {
-    height: auto;
+    height: 1fr;
+    max-height: 100%;
+}
+
+/* 选项页 Tab 页：内容区占满剩余高度，超高时在页内滚动 */
+#options-body TabPane {
+    height: 1fr;
+    overflow-y: auto;
+}
+#options-body ContentTabs {
+    background: $panel;
 }
 
 /* 输入行之间不再隔行（紧凑）；仅在与上方开关组之间留一行分隔 */
@@ -310,7 +351,7 @@ Vertical#xfer-box {
 #options-body Checkbox {
     margin: 0;
     background: transparent;
-    color: #cdd3dc;
+    color: $checkbox-fg;
 }
 
 #options-body Checkbox:focus {
@@ -320,8 +361,8 @@ Vertical#xfer-box {
 /* 焦点/悬停时整行高亮，替代原来的边框 */
 #options-body Checkbox:focus > .toggle--label,
 #options-body Checkbox:hover > .toggle--label {
-    background: #2a3450;
-    color: #e6ebf4;
+    background: $highlight-bg;
+    color: $highlight-fg;
     text-style: bold;
 }
 
@@ -332,7 +373,7 @@ Vertical#xfer-box {
 /* 空心圆（未选）/ 实心圆（选中）标记 */
 #options-body Checkbox > .toggle--button {
     background: transparent;
-    color: #5d687d;
+    color: $toggle-off;
 }
 
 #options-body Checkbox.-on > .toggle--button {
@@ -340,47 +381,47 @@ Vertical#xfer-box {
 }
 
 #options-body Input {
-    background: #232b40;
-    color: #dce2ec;
+    background: $control-bg;
+    color: $control-fg;
     padding: 0 1;
     margin: 0;
 }
 
 #options-body Input:focus {
-    background: #2f3a58;
+    background: $control-focus-bg;
     border: none;
 }
 
 #options-body Input > .input--placeholder {
-    color: #7b869b;
+    color: $placeholder;
 }
 
 /* 下拉框与 Input 外观一致：底色填充、无边框、单行紧凑 */
 #options-body SelectCurrent {
-    background: #232b40;
-    color: #dce2ec;
+    background: $control-bg;
+    color: $control-fg;
     padding: 0 0 0 1;
     height: 1;
 }
 
 #options-body Select:focus > SelectCurrent,
 #options-body SelectCurrent:focus {
-    background: #2f3a58;
+    background: $control-focus-bg;
 }
 
 #options-body SelectCurrent > Static#label {
-    color: #dce2ec;
+    color: $control-fg;
 }
 
 #options-body SelectCurrent .arrow {
-    color: #7b869b;
+    color: $placeholder;
     padding: 0 0 0 1;
 }
 
 /* 下拉展开列表 */
 #options-body Select > SelectOverlay {
-    border: ascii #2a3142;
-    background: #161b29;
+    border: ascii $border;
+    background: $panel;
     max-height: 8;
     padding: 0;
 }
@@ -390,8 +431,8 @@ Vertical#xfer-box {
 }
 
 #options-body SelectOverlay > .option-list--option-highlighted {
-    background: #2a3450;
-    color: #e6ebf4;
+    background: $highlight-bg;
+    color: $highlight-fg;
     text-style: bold;
 }
 
@@ -404,28 +445,28 @@ Vertical#xfer-box {
 #xfer-box .form-row Input {
     width: 1fr;
     height: 1;
-    background: #232b40;
-    color: #dce2ec;
+    background: $control-bg;
+    color: $control-fg;
     padding: 0 1;
     border: none;
     margin: 0;
 }
 
 #xfer-box .form-row Input:focus {
-    background: #2f3a58;
+    background: $control-focus-bg;
     border: none;
 }
 
 #xfer-state {
     height: auto;
     margin-top: 1;
-    color: #9ecbff;
+    color: $accent;
 }
 
 #picker-tree {
     height: 16;
     margin-top: 1;
-    border: ascii #2a3142;
+    border: ascii $border;
 }
 
 #picker-tree DataTable {
@@ -452,14 +493,14 @@ Vertical#xfer-box {
 #picker-path {
     height: 1;
     margin-top: 1;
-    background: #232b40;
-    color: #dce2ec;
+    background: $control-bg;
+    color: $control-fg;
     padding: 0 1;
     border: none;
 }
 
 #picker-path:focus {
-    background: #2f3a58;
+    background: $control-focus-bg;
     border: none;
 }
 
@@ -485,7 +526,7 @@ Vertical#conn-box.compact {
     margin: 0;
     padding: 0 1;
     border: none;
-    background: #141b2c;
+    background: $compact-bg;
 }
 
 /* 标题与按钮固定，中间字段区占满剩余空间并允许滚动 */
@@ -504,7 +545,7 @@ Vertical#conn-box.compact #conn-body {
 .compact .c-label {
     width: 12; /* 各行列标签定宽右对齐，输入框/下拉框从同一列开始 */
     min-width: 0;
-    color: #9da5b4;
+    color: $label;
     content-align: right middle;
     margin-right: 2;
 }
@@ -516,8 +557,8 @@ Vertical#conn-box.compact #conn-body {
 
 /* 简洁模式选项页：下拉框/输入框沿用原有底色外观 */
 #options-box.compact .c-row Select > SelectOverlay {
-    border: ascii #2a3142;
-    background: #161b29;
+    border: ascii $border;
+    background: $panel;
     max-height: 8;
     padding: 0;
 }
@@ -527,52 +568,52 @@ Vertical#conn-box.compact #conn-body {
 }
 
 #options-box.compact SelectOverlay > .option-list--option-highlighted {
-    background: #2a3450;
-    color: #e6ebf4;
+    background: $highlight-bg;
+    color: $highlight-fg;
     text-style: bold;
 }
 
 /* 简洁模式连接页：下拉端口 + 输入框与选项页视觉一致 */
 #conn-box.compact .c-row Input {
-    background: #232b40;
-    color: #dce2ec;
+    background: $control-bg;
+    color: $control-fg;
     padding: 0 1;
     margin: 0;
 }
 
 #conn-box.compact .c-row Input:focus {
-    background: #2f3a58;
+    background: $control-focus-bg;
     border: none;
 }
 
 #conn-box.compact .c-row Input > .input--placeholder {
-    color: #7b869b;
+    color: $placeholder;
 }
 
 #conn-box.compact SelectCurrent {
-    background: #232b40;
-    color: #dce2ec;
+    background: $control-bg;
+    color: $control-fg;
     padding: 0 0 0 1;
     height: 1;
 }
 
 #conn-box.compact .c-row Select:focus > SelectCurrent,
 #conn-box.compact SelectCurrent:focus {
-    background: #2f3a58;
+    background: $control-focus-bg;
 }
 
 #conn-box.compact SelectCurrent > Static#label {
-    color: #dce2ec;
+    color: $control-fg;
 }
 
 #conn-box.compact SelectCurrent .arrow {
-    color: #7b869b;
+    color: $placeholder;
     padding: 0 0 0 1;
 }
 
 #conn-box.compact Select > SelectOverlay {
-    border: ascii #2a3142;
-    background: #161b29;
+    border: ascii $border;
+    background: $panel;
     max-height: 8;
     padding: 0;
 }
@@ -582,8 +623,8 @@ Vertical#conn-box.compact #conn-body {
 }
 
 #conn-box.compact SelectOverlay > .option-list--option-highlighted {
-    background: #2a3450;
-    color: #e6ebf4;
+    background: $highlight-bg;
+    color: $highlight-fg;
     text-style: bold;
 }
 
@@ -596,7 +637,7 @@ Vertical#confirm.compact {
     max-width: 100%;
     margin: 0;
     border: none;
-    background: #141b2c;
+    background: $compact-bg;
 }
 
 /* 文件/目录选择器与协议选择器：小窗口时切换为整宽紧凑布局 */
@@ -608,7 +649,7 @@ Vertical#picker-box.compact {
     margin: 0;
     padding: 0 1;
     border: none;
-    background: #141b2c;
+    background: $compact-bg;
 }
 
 Vertical#picker-box.compact #picker-tree {

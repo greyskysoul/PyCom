@@ -5,10 +5,10 @@ from __future__ import annotations
 from collections.abc import Generator
 
 from textual.app import ComposeResult
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Horizontal, Vertical
 from textual.content import Content
 from textual.widget import Widget
-from textual.widgets import Button, Checkbox, Input, Label, Static
+from textual.widgets import Button, Checkbox, Input, Label, Static, TabbedContent, TabPane
 
 from pycom.config import save_config
 from pycom.i18n import tr
@@ -56,16 +56,14 @@ def _decode_options() -> list[tuple[str, str]]:
     ]
 
 
-def _circle_fields():
-    """The seven boolean option checkboxes shared by both layouts."""
+_THEME_VALUES = frozenset(("auto", "light", "dark"))
+
+
+def _theme_options() -> list[tuple[str, str]]:
     return [
-        _CircleCheckbox(tr("本地回显"), id="echo", compact=True),
-        _CircleCheckbox(tr("自动回绕"), id="wrap", compact=True),
-        _CircleCheckbox(tr("接收 LF -> CR+LF"), id="rx_cr", compact=True),
-        _CircleCheckbox(tr("接收 CR -> CR+LF"), id="rx_lf", compact=True),
-        _CircleCheckbox(tr("捕获时加时间戳"), id="ts", compact=True),
-        _CircleCheckbox(tr("发送方向键/功能键 VT 序列"), id="vt", compact=True),
-        _CircleCheckbox(tr("16 进制接收/发送（HEX）"), id="hex", compact=True),
+        (tr("\u81ea\u52a8"), "auto"),
+        (tr("\u6d45\u8272"), "light"),
+        (tr("\u6df1\u8272"), "dark"),
     ]
 
 
@@ -80,24 +78,40 @@ class _OptionsRich(Vertical):
     """Full layout: dense multi-row form inside a centred box."""
 
     def compose(self) -> ComposeResult:
-        yield Static(tr("选项设置"), id="options-title")
-        with VerticalScroll(id="options-body"):
-            yield from _circle_fields()
-            with Horizontal(classes="form-row"):
-                yield Label(tr("回车发送"), classes="form-label")
-                yield FieldSelect(_enter_options(), id="enter", allow_blank=False, compact=True)
-                yield Label(tr("退格发送"), classes="form-label")
-                yield FieldSelect(_back_options(), id="back", allow_blank=False, compact=True)
-            with Horizontal(classes="form-row"):
-                yield Label(tr("解码字符集"), classes="form-label")
-                yield FieldSelect(_decode_options(), id="decode", allow_blank=False, compact=True)
-                yield Label(tr("传输超时(s)"), classes="form-label")
-                yield Input("", id="timeout", placeholder="10", compact=True)
-            with Horizontal(classes="form-row"):
-                yield Label(tr("重试次数"), classes="form-label")
-                yield Input("", id="retries", placeholder="10", compact=True)
-                yield Label(tr("数据块"), classes="form-label")
-                yield Input("", id="blocksize", placeholder="1024 / 128", compact=True)
+        yield Static(tr("设置"), id="options-title")
+        with TabbedContent(id="options-body"):
+            with TabPane(tr("\u7ec8\u7aef")):
+                yield _CircleCheckbox(tr("本地回显"), id="echo", compact=True)
+                yield _CircleCheckbox(tr("自动回绕"), id="wrap", compact=True)
+                yield _CircleCheckbox(tr("接收 LF -> CR+LF"), id="rx_cr", compact=True)
+                yield _CircleCheckbox(tr("接收 CR -> CR+LF"), id="rx_lf", compact=True)
+                yield _CircleCheckbox(tr("发送方向键/功能键 VT 序列"), id="vt", compact=True)
+                with Horizontal(classes="form-row"):
+                    yield Label(tr("回车发送"), classes="form-label")
+                    yield FieldSelect(_enter_options(), id="enter", allow_blank=False, compact=True)
+                    yield Label(tr("退格发送"), classes="form-label")
+                    yield FieldSelect(_back_options(), id="back", allow_blank=False, compact=True)
+                with Horizontal(classes="form-row"):
+                    yield Label(tr("解码字符集"), classes="form-label")
+                    yield FieldSelect(
+                        _decode_options(), id="decode", allow_blank=False, compact=True
+                    )
+            with TabPane(tr("\u5916\u89c2")):
+                yield _CircleCheckbox(tr("16 进制接收/发送（HEX）"), id="hex", compact=True)
+                with Horizontal(classes="form-row"):
+                    yield Label(tr("\u4e3b\u9898"), classes="form-label")
+                    yield FieldSelect(_theme_options(), id="theme", allow_blank=False, compact=True)
+            with TabPane(tr("\u6587\u4ef6\u4f20\u8f93")):
+                with Horizontal(classes="form-row"):
+                    yield Label(tr("传输超时(s)"), classes="form-label")
+                    yield Input("", id="timeout", placeholder="10", compact=True)
+                    yield Label(tr("重试次数"), classes="form-label")
+                    yield Input("", id="retries", placeholder="10", compact=True)
+                with Horizontal(classes="form-row"):
+                    yield Label(tr("数据块"), classes="form-label")
+                    yield Input("", id="blocksize", placeholder="1024 / 128", compact=True)
+            with TabPane(tr("\u6355\u83b7")):
+                yield _CircleCheckbox(tr("捕获时加时间戳"), id="ts", compact=True)
         with Horizontal(id="options-buttons"):
             yield Button(tr("保存"), id="save", variant="primary", compact=True)
             yield Button(tr("取消"), id="cancel", compact=True)
@@ -108,30 +122,44 @@ class _OptionsCompact(Vertical):
     row, inside a scroll area so very short windows stay usable."""
 
     def compose(self) -> ComposeResult:
-        yield Static(tr("选项设置"), id="options-title")
-        with VerticalScroll(id="options-body"):
-            yield from _circle_fields()
-            yield from _field_row(
-                tr("回车发送"),
-                FieldSelect(_enter_options(), id="enter", allow_blank=False, compact=True),
-            )
-            yield from _field_row(
-                tr("退格发送"),
-                FieldSelect(_back_options(), id="back", allow_blank=False, compact=True),
-            )
-            yield from _field_row(
-                tr("解码字符集"),
-                FieldSelect(_decode_options(), id="decode", allow_blank=False, compact=True),
-            )
-            yield from _field_row(
-                tr("传输超时(s)"), Input("", id="timeout", placeholder="10", compact=True)
-            )
-            yield from _field_row(
-                tr("重试次数"), Input("", id="retries", placeholder="10", compact=True)
-            )
-            yield from _field_row(
-                tr("数据块"), Input("", id="blocksize", placeholder="1024 / 128", compact=True)
-            )
+        yield Static(tr("设置"), id="options-title")
+        with TabbedContent(id="options-body"):
+            with TabPane(tr("\u7ec8\u7aef")):
+                yield _CircleCheckbox(tr("本地回显"), id="echo", compact=True)
+                yield _CircleCheckbox(tr("自动回绕"), id="wrap", compact=True)
+                yield _CircleCheckbox(tr("接收 LF -> CR+LF"), id="rx_cr", compact=True)
+                yield _CircleCheckbox(tr("接收 CR -> CR+LF"), id="rx_lf", compact=True)
+                yield _CircleCheckbox(tr("发送方向键/功能键 VT 序列"), id="vt", compact=True)
+                yield from _field_row(
+                    tr("回车发送"),
+                    FieldSelect(_enter_options(), id="enter", allow_blank=False, compact=True),
+                )
+                yield from _field_row(
+                    tr("退格发送"),
+                    FieldSelect(_back_options(), id="back", allow_blank=False, compact=True),
+                )
+                yield from _field_row(
+                    tr("解码字符集"),
+                    FieldSelect(_decode_options(), id="decode", allow_blank=False, compact=True),
+                )
+            with TabPane(tr("\u5916\u89c2")):
+                yield _CircleCheckbox(tr("16 进制接收/发送（HEX）"), id="hex", compact=True)
+                yield from _field_row(
+                    tr("\u4e3b\u9898"),
+                    FieldSelect(_theme_options(), id="theme", allow_blank=False, compact=True),
+                )
+            with TabPane(tr("\u6587\u4ef6\u4f20\u8f93")):
+                yield from _field_row(
+                    tr("传输超时(s)"), Input("", id="timeout", placeholder="10", compact=True)
+                )
+                yield from _field_row(
+                    tr("重试次数"), Input("", id="retries", placeholder="10", compact=True)
+                )
+                yield from _field_row(
+                    tr("数据块"), Input("", id="blocksize", placeholder="1024 / 128", compact=True)
+                )
+            with TabPane(tr("\u6355\u83b7")):
+                yield _CircleCheckbox(tr("捕获时加时间戳"), id="ts", compact=True)
         with Horizontal(id="options-buttons"):
             yield Button(tr("保存"), id="save", variant="primary", compact=True)
             yield Button(tr("取消"), id="cancel", compact=True)
@@ -172,6 +200,8 @@ class OptionsScreen(AdaptiveModal):
         self.query_one("#timeout", Input).value = str(cfg.xfer_timeout)
         self.query_one("#retries", Input).value = str(cfg.xfer_retries)
         self.query_one("#blocksize", Input).value = str(cfg.xfer_block_size)
+        theme = self.query_one("#theme", FieldSelect)
+        theme.value = cfg.theme if cfg.theme in _THEME_VALUES else "auto"
         # 进入即选中第一项，方向键才能直接上下移动
         self.query_one("#echo", Checkbox).focus()
 
@@ -194,6 +224,7 @@ class OptionsScreen(AdaptiveModal):
         cfg.enter_sends = str(self.query_one("#enter", FieldSelect).value)
         cfg.backspace_sends = str(self.query_one("#back", FieldSelect).value)
         cfg.decode = str(self.query_one("#decode", FieldSelect).value)
+        cfg.theme = str(self.query_one("#theme", FieldSelect).value)
         try:
             cfg.xfer_timeout = float(self.query_one("#timeout", Input).value)
             cfg.xfer_retries = int(self.query_one("#retries", Input).value)
@@ -204,4 +235,5 @@ class OptionsScreen(AdaptiveModal):
             cfg.xfer_block_size = 1024
         save_config(cfg)
         self.app.apply_config()  # type: ignore[attr-defined]
+        self.app.set_theme_mode(cfg.theme)  # type: ignore[attr-defined]
         self.dismiss(None)

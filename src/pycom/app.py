@@ -21,6 +21,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
 from textual.containers import Container, Horizontal, Vertical
 from textual.events import Key, Paste
+from textual.theme import Theme
 from textual.widgets import Button, TextArea
 
 from pycom import APP_NAME, __version__
@@ -227,6 +228,301 @@ def _load_css() -> str:
 CSS_CONTENT = _load_css()
 
 
+# --- colour themes -----------------------------------------------------------
+# Custom CSS variables referenced by app.tcss.  The dark values are the
+# historical palette; the light theme overrides them per-theme (see
+# _build_themes).  They are provided through get_theme_variable_defaults()
+# (fallback) and each Theme.variables (per-theme override).
+_DARK_VARIABLES: dict[str, str] = {
+    "term-bg": "#282c34",
+    "term-fg": "#dcdfe4",
+    "hex-bg": "#313640",
+    "hex-input-bg": "#282c34",
+    "hex-input-focus-bg": "#313640",
+    "hex-input-fg": "#dcdfe4",
+    "muted": "#5c6370",
+    "control-bg": "#3a4048",
+    "control-focus-bg": "#474e5d",
+    "control-fg": "#dcdfe4",
+    "button-bg": "#3a4048",
+    "hover-bg": "#4a5260",
+    "placeholder": "#5c6370",
+    "label": "#919baa",
+    "faint": "#5c6370",
+    "border": "#474e5d",
+    "highlight-bg": "#474e5d",
+    "highlight-fg": "#dcdfe4",
+    "error": "#e06c75",
+    "accent": "#61afef",
+    "checkbox-fg": "#dcdfe4",
+    "toggle-off": "#5c6370",
+    "compact-bg": "#282c34",
+    "menu-btn-bg": "#3d6ea5",
+    "menu-btn-fg": "#ffffff",
+    "menu-btn-hover-bg": "#4a7fb5",
+    "table-header-bg": "#3a4048",
+    "table-header-fg": "#dcdfe4",
+}
+
+_LIGHT_VARIABLES: dict[str, str] = {
+    "term-bg": "#fafafa",
+    "term-fg": "#383a42",
+    "hex-bg": "#f0f0f0",
+    "hex-input-bg": "#ffffff",
+    "hex-input-focus-bg": "#f0f0f0",
+    "hex-input-fg": "#383a42",
+    "muted": "#a0a1a7",
+    "control-bg": "#f0f0f0",
+    "control-focus-bg": "#e5e5e5",
+    "control-fg": "#383a42",
+    "button-bg": "#f0f0f0",
+    "hover-bg": "#fafafa",
+    "placeholder": "#a0a1a7",
+    "label": "#a0a1a7",
+    "faint": "#a0a1a7",
+    "border": "#d4d4d4",
+    "highlight-bg": "#e5e5e5",
+    "highlight-fg": "#383a42",
+    "error": "#e45649",
+    "accent": "#0184bc",
+    "checkbox-fg": "#383a42",
+    "toggle-off": "#a0a1a7",
+    "compact-bg": "#f0f0f0",
+    "menu-btn-bg": "#7fb8e0",
+    "menu-btn-fg": "#1f2328",
+    "menu-btn-hover-bg": "#8ec4e8",
+    "table-header-bg": "#e5e5e5",
+    "table-header-fg": "#383a42",
+}
+
+
+def _build_themes() -> dict[str, Theme]:
+    """The two PyCom colour themes (dark = the historical palette)."""
+    return {
+        "pycom-dark": Theme(
+            name="pycom-dark",
+            primary="#61afef",
+            secondary="#56b6c2",
+            accent="#e5c07b",
+            warning="#e5c07b",
+            error="#e06c75",
+            success="#98c379",
+            foreground="#dcdfe4",
+            background="#282c34",
+            surface="#313640",
+            panel="#313640",
+            dark=True,
+            variables=dict(_DARK_VARIABLES),
+        ),
+        "pycom-light": Theme(
+            name="pycom-light",
+            primary="#0184bc",
+            secondary="#0997b3",
+            accent="#c18401",
+            warning="#c18401",
+            error="#e45649",
+            success="#50a14f",
+            foreground="#383a42",
+            background="#fafafa",
+            surface="#ffffff",
+            panel="#f0f0f0",
+            dark=False,
+            variables=dict(_LIGHT_VARIABLES),
+        ),
+    }
+
+
+def _env_dark() -> bool | None:
+    """Cheap hint from the COLORFGBG env var (``fg;bg``, 0-7 = dark bg)."""
+    val = os.environ.get("COLORFGBG")
+    if not val:
+        return None
+    parts = val.split(";")
+    if len(parts) < 2:
+        return None
+    try:
+        return int(parts[1]) < 8
+    except ValueError:
+        return None
+
+
+def _system_dark() -> bool | None:
+    """Windows: read the system light/dark theme from the registry.
+
+    ``AppsUseLightTheme`` is 0 for dark and 1 for light.  Returns None on
+    non-Windows or when the value cannot be read.
+    """
+    if os.name != "nt":
+        return None
+    try:
+        import winreg
+
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+        )
+        try:
+            value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+            return value == 0  # 0 = dark, 1 = light
+        finally:
+            winreg.CloseKey(key)
+    except Exception:
+        return None
+
+
+def _parse_osc11(response: bytes) -> tuple[int, int, int] | None:
+    """Parse an OSC 11 background-colour reply into (r, g, b).
+
+    Accepts ``ESC ] 11 ; rgb:RRRR/GGGG/BBBB`` (ST or BEL terminator),
+    with 3- or 4-digit hex per channel, plus ``#RRGGBB``.
+    """
+    if not response:
+        return None
+    text = response.decode("ascii", "replace")
+    for marker in ("\x1b]11;", "]11;"):
+        if marker in text:
+            text = text.split(marker, 1)[1]
+            break
+    text = text.rstrip("\x07\x1b\\\x00").strip()
+    if text.startswith("rgb:"):
+        channels = text[4:].split("/")
+        if len(channels) != 3:
+            return None
+        vals: list[int] = []
+        for ch in channels:
+            try:
+                n = int(ch, 16)
+            except ValueError:
+                return None
+            if len(ch) == 4:
+                n >>= 8
+            elif len(ch) == 3:
+                n >>= 4
+            elif len(ch) == 1:
+                n <<= 4
+            vals.append(n)
+        return (vals[0], vals[1], vals[2])
+    if text.startswith("#") and len(text) == 7:
+        try:
+            return (int(text[1:3], 16), int(text[3:5], 16), int(text[5:7], 16))
+        except ValueError:
+            return None
+    return None
+
+
+def _read_osc_reply(timeout: float) -> bytes:
+    """Read the terminal's reply to an OSC query from stdin (raw)."""
+    buf = bytearray()
+    deadline = time.monotonic() + timeout
+    if os.name == "nt":
+        import msvcrt
+
+        fd = sys.stdin.fileno()
+        try:
+            msvcrt.setmode(fd, os.O_BINARY)
+        except Exception:
+            return b""
+        while time.monotonic() < deadline:
+            if msvcrt.kbhit():
+                ch = os.read(fd, 1)
+                if not ch:
+                    break
+                buf += ch
+                if ch in (b"\x07", b"\\"):
+                    break
+            else:
+                time.sleep(0.005)
+    else:
+        import select
+        import termios
+        import tty
+
+        fd = sys.stdin.fileno()
+        try:
+            old = termios.tcgetattr(fd)  # type: ignore[attr-defined]
+        except Exception:
+            return b""
+        try:
+            tty.setraw(fd)  # type: ignore[attr-defined]
+            while time.monotonic() < deadline:
+                r, _, _ = select.select([fd], [], [], 0.01)
+                if r:
+                    ch = os.read(fd, 1)
+                    if not ch:
+                        break
+                    buf += ch
+                    if ch in (b"\x07", b"\\"):
+                        break
+        finally:
+            with contextlib.suppress(Exception):
+                termios.tcsetattr(fd, termios.TCSADRAIN, old)  # type: ignore[attr-defined]
+    return bytes(buf)
+
+
+def _query_osc11(timeout: float) -> bytes | None:
+    """Send an OSC 11 query and read the reply (best-effort).
+
+    On Windows the console is switched to raw mode first so the reply is
+    delivered immediately (cooked mode buffers it until Enter, which would
+    otherwise leak the reply into the UI).  Returns None when the query
+    cannot be sent.
+    """
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        return None
+    if os.name == "nt":
+        import ctypes
+        import msvcrt
+        from ctypes import wintypes
+
+        fd = sys.stdin.fileno()
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.GetStdHandle(-10)  # STD_INPUT_HANDLE
+        mode = wintypes.DWORD()
+        try:
+            msvcrt.setmode(fd, os.O_BINARY)
+            if not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+                return None
+            # clear ENABLE_LINE_INPUT (0x0002) + ENABLE_ECHO_INPUT (0x0004)
+            kernel32.SetConsoleMode(handle, mode.value & ~0x0006)
+        except Exception:
+            return None
+        try:
+            sys.stdout.buffer.write(b"\x1b]11;?\x07")
+            sys.stdout.buffer.flush()
+            return _read_osc_reply(timeout)
+        finally:
+            with contextlib.suppress(Exception):
+                kernel32.SetConsoleMode(handle, mode.value)
+    sys.stdout.buffer.write(b"\x1b]11;?\x07")
+    sys.stdout.buffer.flush()
+    return _read_osc_reply(timeout)
+
+
+def detect_terminal_dark(timeout: float = 0.5) -> bool | None:
+    """Best-effort detection of the terminal's light/dark background.
+
+    Priority:
+      1. ``COLORFGBG`` environment variable (set by many terminals).
+      2. OSC 11 query (the terminal's actual background colour).
+      3. Windows system theme (registry ``AppsUseLightTheme``).
+
+    Returns True for a dark background, False for a light one, or None when
+    unknown (the caller falls back to the default theme).
+    """
+    env = _env_dark()
+    if env is not None:
+        return env
+    raw = _query_osc11(timeout)
+    rgb = _parse_osc11(raw) if raw else None
+    if rgb is not None:
+        r, g, b = rgb
+        return (0.2126 * r + 0.7152 * g + 0.0722 * b) < 128.0
+    system = _system_dark()
+    if system is not None:
+        return system
+    return None
+
+
 class _QueueIO:
     """Adapt a ``queue.Queue`` + SerialManager to the YModemEngine read/write API."""
 
@@ -281,9 +577,15 @@ class PyComApp(App):
         startup_text: str | None = None,
         startup_script: str | None = None,
         enable_debug: bool = False,
+        detected_dark: bool | None = None,
     ) -> None:
         super().__init__()
         self.cfg = cfg or AppConfig()
+        # register the two colour themes and apply the configured one
+        for _name, _theme in _build_themes().items():
+            self.register_theme(_theme)
+        self._detected_dark = detected_dark
+        self.theme = self._resolve_theme(detected_dark)
         # 解析界面语言：优先已保存的选择，否则自动侦测系统语言（失败退回英文）
         if self.cfg.language not in ("zh", "en"):
             self.cfg.language = set_language(detect_system_language())
@@ -938,6 +1240,36 @@ class PyComApp(App):
         self._refresh_hex_pane()
         self._refresh_status()
 
+    # ============================================================================ theme
+    def get_theme_variable_defaults(self) -> dict[str, str]:
+        """Fallback values for the custom CSS variables (dark palette)."""
+        return dict(_DARK_VARIABLES)
+
+    def set_theme_mode(self, mode: str) -> None:
+        """Switch the colour theme mode now and persist it.
+
+        ``mode`` is one of "auto" | "light" | "dark"; "auto" follows the
+        terminal's detected background colour.
+        """
+        if mode not in ("auto", "light", "dark"):
+            return
+        self.cfg.theme = mode
+        save_config(self.cfg)
+        self._apply_theme()
+
+    def _apply_theme(self) -> None:
+        self.theme = self._resolve_theme(self._detected_dark)
+
+    def _resolve_theme(self, detected_dark: bool | None) -> str:
+        """Map the configured theme mode to a registered theme name."""
+        mode = self.cfg.theme
+        if mode == "light":
+            return "pycom-light"
+        if mode == "dark":
+            return "pycom-dark"
+        # auto: follow the terminal (unknown -> dark, the historical default)
+        return "pycom-dark" if detected_dark is not False else "pycom-light"
+
     # ============================================================================ status
     def _status_text(self) -> str:
         conn = tr("虚拟回环") if self._loopback else self.cfg.last.short()
@@ -1387,6 +1719,15 @@ def main(argv=None) -> int:
 
     cli_conn = _make_conn(cfg, args)
 
+    # 启动前检查终端尺寸：窗口小到完全无法使用时直接提示并退出，不进入 TUI。
+    cols, rows = shutil.get_terminal_size()
+    if cols < MIN_TERMINAL_COLS or rows < MIN_TERMINAL_ROWS:
+        sys.stderr.write(_too_small_message(cols, rows))
+        return 1
+
+    # auto theme: query the terminal background (fall back to dark)
+    detected_dark = detect_terminal_dark() if cfg.theme == "auto" else None
+
     app = PyComApp(
         cfg=cfg,
         cli_conn=cli_conn,
@@ -1394,14 +1735,8 @@ def main(argv=None) -> int:
         startup_text=args.send,
         startup_script=args.script,
         enable_debug=args.enable_debug,
+        detected_dark=detected_dark,
     )
-
-    # 启动前检查终端尺寸：窗口小到完全无法使用时直接提示并退出，不进入 TUI。
-    cols, rows = shutil.get_terminal_size()
-    if cols < MIN_TERMINAL_COLS or rows < MIN_TERMINAL_ROWS:
-        sys.stderr.write(_too_small_message(cols, rows))
-        return 1
-
     result = app.run(mouse=not args.no_mouse)
     if result == _EXIT_TOO_SMALL:  # 运行中窗口被缩到过小
         w, h = app._too_small_size

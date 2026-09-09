@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pycom"
-version = "1.1.1"
+version = "1.1.2"
 description = "A minicom-style cross-platform serial terminal TUI (Windows + Linux) with robust YMODEM file transfer, HEX mode, VT/ANSI rendering, session capture, and a --bare headless pass-through for embedded firmware flashing and everyday serial debugging."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [{ name = "PyCom" }]
 keywords = [
@@ -35,6 +35,7 @@ classifiers = [
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
     "Topic :: Terminals :: Serial",
     "Topic :: Communications",
 ]
@@ -50,7 +51,7 @@ dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",
     "ruff>=0.5",
-    "mypy>=1.10",
+    "mypy>=1.10,<1.19",
     "pyinstaller>=6",
 ]
 # 测试专用：用于与 lrzsz 交互验证（Linux）
@@ -70,7 +71,7 @@ include = ["src/pycom", "packaging", "tests"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py39"
 src = ["src", "tests"]
 
 [tool.ruff.lint]
@@ -78,7 +79,7 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 ignore = ["E501"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.9"
 files = ["src/pycom"]
 strict = false
 ignore_missing_imports = true

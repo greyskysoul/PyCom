@@ -41,3 +41,8 @@ def test_load_corrupt_returns_defaults(tmp_config_dir):
     (tmp_config_dir / "config.json").write_text("{ not json !", encoding="utf-8")
     cfg = cfgmod.load_config()
     assert isinstance(cfg, AppConfig)
+
+
+def test_theme_defaults_to_auto(tmp_config_dir):
+    cfg = cfgmod.load_config()
+    assert cfg.theme == "auto"
