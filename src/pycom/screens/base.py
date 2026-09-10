@@ -8,6 +8,7 @@ from typing import ClassVar
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
+from textual.dom import DOMNode
 from textual.events import Key
 from textual.screen import Screen
 from textual.widget import Widget
@@ -46,7 +47,7 @@ def _is_effectively_displayed(widget: Widget) -> bool:
     even though its ``Contents`` is ``display:none``.  Walk the ancestors so
     arrow-key navigation skips fields hidden by a collapsed container.
     """
-    node: Widget | None = widget
+    node: DOMNode | None = widget
     while node is not None:
         if not node.display:
             return False

@@ -96,10 +96,9 @@ class _OptionsRich(Vertical):
                     yield FieldSelect(
                         _decode_options(), id="decode", allow_blank=False, compact=True
                     )
-            with TabPane(tr("\u5916\u89c2")):
-                with Horizontal(classes="form-row"):
-                    yield Label(tr("\u4e3b\u9898"), classes="form-label")
-                    yield FieldSelect(_theme_options(), id="theme", allow_blank=False, compact=True)
+            with TabPane(tr("\u5916\u89c2")), Horizontal(classes="form-row"):
+                yield Label(tr("\u4e3b\u9898"), classes="form-label")
+                yield FieldSelect(_theme_options(), id="theme", allow_blank=False, compact=True)
             with TabPane(tr("\u6587\u4ef6\u4f20\u8f93")):
                 with Horizontal(classes="form-row"):
                     yield Label(tr("传输超时(s)"), classes="form-label")

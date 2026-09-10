@@ -131,10 +131,10 @@ pycom --bare -p COM3 -b 115200
 ## 开发
 
 ```bash
-pytest            # 单元测试：CRC / 帧 / YMODEM 回环等
-ruff check .      # 静态检查
-mypy src/pycom    # 类型检查
+python tools/check.py   # 提交前检查：ruff / 格式 / mypy / 单元测试
 ```
+
+该命令与 CI 测试 job 使用相同的检查入口；所有检查通过后再提交。
 
 结构：`src/pycom/`（`serialio.py` 串口、`termdisplay/` 终端渲染、`xfer/ymodem.py`
 协议引擎、`screens/` 各界面、`keys.py` 按键状态机、`app.py` 主程序）。

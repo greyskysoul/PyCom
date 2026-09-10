@@ -42,12 +42,16 @@ class _ConnRich(Vertical):
         with Collapsible(title=tr("高级参数"), collapsed=True, id="adv-params"):
             with Horizontal(classes="form-row"):
                 yield Label(tr("数据位"), classes="form-label")
-                yield Input("", id="bytesize", placeholder=_PORT_PLACEHOLDERS["bytesize"], compact=True)
+                yield Input(
+                    "", id="bytesize", placeholder=_PORT_PLACEHOLDERS["bytesize"], compact=True
+                )
                 yield Label(tr("校验"), classes="form-label")
                 yield Input("", id="parity", placeholder=_PORT_PLACEHOLDERS["parity"], compact=True)
             with Horizontal(classes="form-row"):
                 yield Label(tr("停止位"), classes="form-label")
-                yield Input("", id="stopbits", placeholder=_PORT_PLACEHOLDERS["stopbits"], compact=True)
+                yield Input(
+                    "", id="stopbits", placeholder=_PORT_PLACEHOLDERS["stopbits"], compact=True
+                )
                 yield Label(tr("流控"), classes="form-label")
                 yield Input("", id="flow", placeholder=_PORT_PLACEHOLDERS["flow"], compact=True)
         with Horizontal(id="conn-buttons"):
