@@ -139,6 +139,8 @@ class TerminalView(Static):
         self._auto_scroll = True
         self._active = True  # this view is the active typing target
         self.on_scroll: object | None = None  # optional callback after a scroll
+        # 视图/模型尺寸变化后调用（HEX 模式据此按新宽度重排接收区）。
+        self.on_resized: object | None = None
 
     @property
     def active(self) -> bool:
@@ -160,6 +162,9 @@ class TerminalView(Static):
     def on_resize(self) -> None:
         self._apply_size()
         self.refresh()
+        # 模型已经按新尺寸调整过，通知外部（HEX 模式重排接收区）。
+        if callable(self.on_resized):
+            self.on_resized()
 
     def _apply_size(self) -> None:
         w = max(1, self.size.width)

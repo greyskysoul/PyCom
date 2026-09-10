@@ -879,12 +879,56 @@ async def test_hex_editor_autoformats_and_rejects_invalid():
         await pilot.pause(0.1)
         assert field.text == "AA BB 0D"
 
-        # a long input is wrapped into lines of bytes that fit the width
-        field.text = "AA" * 30
+        # 超出宽度的长内容会按“每行 N 字节”分组换行（N 由输入框宽度决定）
+        per_line = hex_bytes_per_line(max(1, field.size.width), max_bytes=32)
+        assert per_line > 16  # 宽窗口下不再是固定 16 字节/行
+        field.text = "AA" * (per_line + 3)
         await pilot.pause(0.1)
         lines = field.text.split("\n")
-        assert all(line == " ".join("AA" for _ in range(16)) for line in lines[:-1])
-        assert len(lines) == 2  # 30 bytes -> 16 + 14
+        assert [len(line.split()) for line in lines] == [per_line, 3]
+
+
+async def test_hex_send_box_reflows_with_width():
+    """发送框的换行随窗口宽度变化（32/16/8/4），变窄后再变宽恢复原分组。
+
+    回归：发送框曾固定在 16 字节/行封顶，窗口再宽也不换行。
+    """
+    from pycom.config import AppConfig
+
+    app = PyComApp(cfg=AppConfig(hex_mode=True))
+    async with app.run_test(size=(140, 30)) as pilot:
+        await pilot.pause(0.2)
+        field = app.query_one("#hex-input")
+        field.text = "AA" * 40  # 40 字节
+        await pilot.pause(0.1)
+
+        def per_line() -> int:
+            return hex_bytes_per_line(max(1, field.size.width), max_bytes=32)
+
+        def groups() -> list[int]:
+            return [len(line.split()) for line in field.text.split("\n")]
+
+        def widest() -> int:
+            return max(len(line) for line in field.text.split("\n"))
+
+        assert per_line() == 32
+        assert groups() == [32, 8]
+
+        await pilot.resize_terminal(60, 30)
+        await pilot.pause(0.3)
+        assert per_line() == 16
+        assert groups() == [16, 16, 8]
+
+        await pilot.resize_terminal(40, 30)
+        await pilot.pause(0.3)
+        assert per_line() == 8
+        assert groups() == [8] * 5
+
+        await pilot.resize_terminal(140, 30)
+        await pilot.pause(0.3)
+        assert per_line() == 32
+        assert groups() == [32, 8]  # 变宽后恢复
+        assert widest() <= field.size.width  # 内容始终不超出输入框
 
 
 async def test_hex_receive_displays_hex_text():
@@ -923,7 +967,7 @@ async def test_hex_receive_multiline_wraps_to_line_start():
     app = PyComApp(cfg=AppConfig(hex_mode=True))
     async with app.run_test(size=(100, 28)) as pilot:
         await pilot.pause()
-        per_line = hex_bytes_per_line(max(1, app.model.columns), max_bytes=32)
+        per_line = app._hex_rx_per_line()
         app._rx_to_terminal(bytes(range(per_line + 1)))  # 一整行 + 1 字节
         await pilot.pause(0.3)
         rows = ["".join(c.data for c in row).rstrip() for row in app.model.screen_rows()]
@@ -959,7 +1003,7 @@ async def test_hex_receive_wraps_across_small_chunks():
     app = PyComApp(cfg=AppConfig(hex_mode=True))
     async with app.run_test(size=(100, 28)) as pilot:
         await pilot.pause()
-        per_line = hex_bytes_per_line(max(1, app.model.columns), max_bytes=32)
+        per_line = app._hex_rx_per_line()
         # 每块只发 2 字节，但累计超过 per_line 字节后必须发生换行
         chunk = b"\xaa\xbb"
         for _ in range(per_line // 2 + 1):
@@ -982,7 +1026,7 @@ async def test_hex_receive_ascii_pane():
     app = PyComApp(cfg=AppConfig(hex_mode=True))
     async with app.run_test(size=(100, 28)) as pilot:
         await pilot.pause()
-        per_line = hex_bytes_per_line(max(1, app.model.columns), max_bytes=32)
+        per_line = app._hex_rx_per_line()
         row = b"A\x00B\x80" + bytes([0x63]) * (per_line - 4)
         app._rx_to_terminal(row)
         await pilot.pause(0.3)
@@ -1016,6 +1060,105 @@ async def test_hex_receive_ascii_updates_in_real_time():
         await pilot.pause(0.3)
         pane.refresh()
         assert pane.render().plain.strip() == "AB.C"
+
+
+async def test_hex_ascii_pane_width_follows_bytes_per_line():
+    """ASCII 分栏宽度跟随“每行字节数”（32/16/8/4）：宽窗口 32 字节 -> 33 列
+    （32 个字符 + 1 列分隔边框），窄窗口退到 16 字节 -> 17 列。
+
+    分栏宽度由整个终端区宽度决定（``4n <= 总宽度``），因此不会出现
+    “分栏变宽 -> hex 区变窄 -> 每行字节数又变”的来回抖动。
+    """
+    from pycom.config import AppConfig
+
+    app = PyComApp(cfg=AppConfig(hex_mode=True))
+    async with app.run_test(size=(140, 28)) as pilot:
+        await pilot.pause(0.3)
+        pane = app.query_one("#hex-ascii-pane")
+        assert app._hex_rx_per_line() == 32
+        assert pane.content_size.width == 32  # 内容区正好 32 个字符
+        assert pane.region.width == 33
+
+        # 变窄：每行 16 字节，分栏随之缩到 17 列（不再固定 33 列）
+        await pilot.resize_terminal(95, 28)
+        await pilot.pause(0.3)
+        assert app._hex_rx_per_line() == 16
+        assert pane.region.width == 17
+        assert pane.content_size.width == 16
+
+        # 更窄：8 字节/行 -> 9 列
+        await pilot.resize_terminal(63, 28)
+        await pilot.pause(0.3)
+        assert app._hex_rx_per_line() == 8
+        assert pane.region.width == 9
+
+        # 变回宽窗口：恢复 32/33
+        await pilot.resize_terminal(140, 28)
+        await pilot.pause(0.3)
+        assert app._hex_rx_per_line() == 32
+        assert pane.region.width == 33
+        assert pane.content_size.width == 32
+
+
+async def test_hex_ascii_pane_fits_a_full_32_byte_row():
+    """分栏宽度按最多 32 个字符设置：满行 32 字节时最后一个 ASCII 字符也要
+    完整显示（分栏不能比它要显示的字符更宽/更窄）。"""
+    from pycom.config import AppConfig
+
+    app = PyComApp(cfg=AppConfig(hex_mode=True))
+    async with app.run_test(size=(140, 28)) as pilot:
+        await pilot.pause()
+        assert app._hex_rx_per_line() == 32  # 宽窗口：每行 32 字节
+        app._rx_to_terminal(bytes(range(0x41, 0x61)))  # 32 个可打印字符
+        await pilot.pause(0.3)
+        pane = app.query_one("#hex-ascii-pane")
+        line = pane.render().plain.split("\n")[0]
+        assert len(line) == 32
+        # 去掉左侧 1 列分隔边框后，内容区正好容纳 32 个字符
+        assert pane.content_size.width == 32
+
+
+async def test_hex_reflow_on_resize_keeps_every_byte():
+    """HEX 模式下先变窄再变宽：被挤出旧行的字节必须按新宽度重新排版显示。
+
+    pyte 变窄时会裁掉超出新宽度的字符且变宽后无法还原；应用保留 HEX 模式下
+    收到的原始字节，每行字节数变化时整体重排，所以字节一个都不能少。"""
+    from pycom.config import AppConfig
+
+    app = PyComApp(cfg=AppConfig(hex_mode=True))
+    async with app.run_test(size=(110, 28)) as pilot:
+        await pilot.pause()
+        wide_per_line = app._hex_rx_per_line()
+        data = bytes(range(64))
+        app._rx_to_terminal(data)
+        await pilot.pause(0.2)
+
+        def tokens() -> list[str]:
+            rows = app.model.history_rows() + app.model.screen_rows()
+            out: list[str] = []
+            for row in rows:
+                out.extend("".join(c.data for c in row).split())
+            return out
+
+        expected = [f"{b:02X}" for b in data]
+        assert tokens() == expected
+
+        # 变窄：每行字节数变小，原来 16 字节/行的内容会被裁掉
+        await pilot.resize_terminal(50, 28)
+        await pilot.pause(0.3)
+        narrow_per_line = app._hex_rx_per_line()
+        assert narrow_per_line < wide_per_line
+        assert tokens() == expected  # 重排后一个字节都不少
+        rows = ["".join(c.data for c in row).rstrip() for row in app.model.screen_rows()]
+        assert rows[0] == " ".join(f"{b:02X}" for b in data[:narrow_per_line])
+
+        # 变宽：恢复原来的每行字节数，内容依然完整（不再永久丢失）
+        await pilot.resize_terminal(110, 28)
+        await pilot.pause(0.3)
+        assert app._hex_rx_per_line() == wide_per_line
+        assert tokens() == expected
+        rows = ["".join(c.data for c in row).rstrip() for row in app.model.screen_rows()]
+        assert rows[0] == " ".join(f"{b:02X}" for b in range(wide_per_line))
 
 
 async def test_hex_send_button_transmits_bytes():
@@ -1082,13 +1225,74 @@ async def test_hex_enter_in_input_sends_bytes():
         # 发送后焦点仍留在输入框、内容保留，可继续输入
         assert app.focused.id == "hex-input"
 
-        # 输入框为空时回车：不发送、弹出提醒
+        # 输入框为空时回车：不发送、也不弹提示框（静默忽略）
         app.query_one("#hex-input").text = ""
         await pilot.pause(0.05)
+        notes.clear()
         await pilot.press("enter")
         await pilot.pause(0.2)
         assert sent == [b"\xaa\x0d"]
-        assert any("输入字节" in n for n in notes)
+        assert notes == []
+
+
+async def test_hex_toast_dismissed_by_enter_without_stacking():
+    """HEX 模式启动时的 toast（如“已连接 COM3”）按回车应关闭，且不再弹出新的
+    “请先输入字节”提示框。
+
+    回归：焦点在 16 进制输入框（TextArea）时按键会被它 ``event.stop()``，不会
+    冒泡到 ``App._on_key``，之前的实现里提示框因此永远关不掉；而回车又会走
+    “空输入框 -> 弹提示”的分支，看起来就是提示框越堆越多。
+    """
+    from pycom.config import AppConfig
+
+    app = PyComApp(cfg=AppConfig(hex_mode=True))
+    async with app.run_test(size=(100, 28)) as pilot:
+        await pilot.pause(0.3)
+        assert app.focused.id == "hex-input"  # 焦点在输入框：按键被 TextArea 消费
+        app.notify("已连接 COM3", timeout=60)  # 模拟启动连接提示
+        await pilot.pause(0.1)
+        assert len(app._notifications) == 1
+
+        await pilot.press("enter")
+        await pilot.pause(0.2)
+        assert len(app._notifications) == 0, "回车应关闭提示框"
+
+        # 反复按回车：提示框不应重新弹出，也不应堆叠
+        for _ in range(3):
+            await pilot.press("enter")
+            await pilot.pause(0.1)
+            assert len(app._notifications) == 0
+
+
+async def test_hex_toast_closed_by_key_without_swallowing_it():
+    """关闭提示框的那次按键仍要照常执行（这里把十六进制位输入到输入框）。"""
+    from pycom.config import AppConfig
+
+    app = PyComApp(cfg=AppConfig(hex_mode=True))
+    async with app.run_test(size=(100, 28)) as pilot:
+        await pilot.pause(0.3)
+        app.notify("HEX 模式已开启", timeout=60)
+        await pilot.pause(0.1)
+        await pilot.press("a")
+        await pilot.pause(0.1)
+        assert len(app._notifications) == 0
+        assert app.query_one("#hex-input").text == "A", "按键不能被吞掉"
+
+
+async def test_hex_toggle_keeps_its_own_toast():
+    """Ctrl+A H 的按键先关掉旧提示，但不能把这次切换刚产生的提示一并清掉。"""
+    app = PyComApp()
+    async with app.run_test(size=(100, 28)) as pilot:
+        await pilot.pause(0.2)
+        app.notify("旧提示", timeout=60)
+        await pilot.pause(0.1)
+        await pilot.press("ctrl+a")
+        await pilot.press("h")
+        await pilot.pause(0.3)
+        assert app.cfg.hex_mode is True
+        messages = [n.message for n in app._notifications]
+        assert len(messages) == 1
+        assert "HEX 模式已开启" in messages[0]
 
 
 async def test_idle_exit_when_no_bytes_received():

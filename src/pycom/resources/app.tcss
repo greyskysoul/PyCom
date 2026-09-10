@@ -23,14 +23,15 @@ Screen {
 }
 
 /* 右侧 ASCII 分栏：只在 HEX 模式挂载，用分隔边框和稍浅底色区分。
-   加宽到 34 列，可容纳 32 个 ASCII 字符（32 字节/行） */
+   宽度由应用按“每行字节数 + 1 列分隔边框”动态设置（32 字节行 -> 33 列），
+   这里的 33 只是首帧的默认值（如 32 字节/行）。*/
 #hex-ascii-pane {
-    width: 34;
+    width: 33;
     height: 1fr;
     background: $hex-bg;
     color: $term-fg;
     border-left: round $border;
-    padding: 0 1;
+    padding: 0;
     overflow: hidden;
 }
 

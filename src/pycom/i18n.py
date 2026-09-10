@@ -169,10 +169,9 @@ _EN: dict[str, str] = {
     "连接": "Connect",
     "返回": "Back",
     # --- transfer screens ---
+    # “发送文件/接收文件”同时用作协议选择弹窗的标题，英文保持 "Send file"/"Receive file"
     "发送文件": "Send file",
     "接收文件": "Receive file",
-    "选择发送协议": "Choose send protocol",
-    "选择接收协议": "Choose receive protocol",
     "文件": "File",
     "保存目录": "Save to directory",
     "文件名": "File name",
@@ -205,7 +204,7 @@ _EN: dict[str, str] = {
     "串口参数": "Serial port",
     "数据传输": "Data transfer",
     "清屏": "Clear screen",
-    "16进制 开/关": "HEX on/off",
+    "HEX模式 开/关": "HEX on/off",
     "会话捕获 开/关": "Capture on/off",
     "选项": "Options",
     "发送文件(ZMODEM)": "Send file (ZMODEM)",

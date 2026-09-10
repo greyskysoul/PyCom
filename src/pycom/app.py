@@ -20,7 +20,7 @@ from rich.text import Text as RichText
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
 from textual.containers import Container, Horizontal, Vertical
-from textual.events import Key, Paste
+from textual.events import Event, Key, Paste
 from textual.theme import Theme
 from textual.widgets import Button, TextArea
 
@@ -53,6 +53,9 @@ _HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
 # Vertical-bar cursor shown in the 16-hex editor while it is not focused.
 _HEX_BAR = "\u2502"
 _HEX_BAR_STYLE = Style(color="#9aa7b8")
+
+# HEX 模式每行最多显示的字节数（接收区 / 发送框共用同一套档位：32/16/8/4）。
+_HEX_MAX_BYTES_PER_LINE = 32
 
 # 主窗口最小可用终端尺寸：低于该值时界面“完全无法使用”，启动/运行时会打印
 # 提示并直接退出（而不是渲染一个残破、无法操作的界面）。
@@ -102,7 +105,7 @@ class _HexArea(TextArea):
 
     * only hex digits are kept (anything else is stripped while typing),
     * a single space is inserted after every byte,
-    * each line holds 4/8/16 bytes depending on the current width.
+    * each line holds 4/8/16/32 bytes depending on the current width.
     """
 
     BINDINGS: ClassVar[list] = [
@@ -121,15 +124,21 @@ class _HexArea(TextArea):
         self.cursor_blink = False  # 常亮的块状光标，不闪烁
 
     def action_send_hex(self) -> None:
-        """回车直接发送：解析输入框内容并发送到串口。"""
-        self.app._send_hex_box()  # type: ignore[attr-defined]
+        """回车直接发送：解析输入框内容并发送到串口。
+
+        输入框为空时静默忽略：回车同时也是“按任意键关闭 toast 提示”的按键，
+        再弹一个“请先输入字节”的提示框会让人以为提示框关不掉。
+        """
+        self.app._send_hex_box(report_empty=False)  # type: ignore[attr-defined]
 
     def on_text_area_changed(self, _event: TextArea.Changed) -> None:
         self._reflow(keep_cursor=True)
 
     def on_resize(self) -> None:
+        """宽度变化后按新宽度重新分组换行（与接收区同一套 32/16/8/4 档位），
+        并保持光标所在的字节位置，不把光标甩到末尾。"""
         if self.text:
-            self._reflow(keep_cursor=False)
+            self._reflow(keep_cursor=True)
 
     def _watch_has_focus(self, focus: bool) -> None:
         # 聚焦/失焦时丢弃行缓存并重绘：失焦要画出“竖线”光标，聚焦要恢复实心块。
@@ -152,13 +161,18 @@ class _HexArea(TextArea):
         return RichText.assemble(line[:col], bar, line[col + 1 :])
 
     def _reflow(self, keep_cursor: bool) -> None:
-        """Rebuild the document in canonical form: only hex, spaced per byte."""
+        """Rebuild the document in canonical form: only hex, spaced per byte.
+
+        每行字节数按输入框自身的宽度取（与接收区同一套 32/16/8/4 档位），
+        因此窗口变宽/变窄时输入内容会自动重新换行。
+        """
         if self._reformatting:
             return
         raw = self.text or ""
         digits = "".join(c for c in raw if c in _HEX_DIGITS).upper()
         target = self._hex_digits_before_cursor(raw)
-        formatted = format_hex_lines(digits, hex_bytes_per_line(max(1, self.size.width)))
+        per_line = hex_bytes_per_line(max(1, self.size.width), max_bytes=_HEX_MAX_BYTES_PER_LINE)
+        formatted = format_hex_lines(digits, per_line)
         if formatted == raw:
             return
         self._reformatting = True
@@ -205,10 +219,10 @@ class _StatusMenuButton(Button, can_focus=False):
 _PREFIX_FUNCS = {
     "z": "主菜单",
     "p": "串口参数",
-    "s": "选择发送协议",
-    "r": "选择接收协议",
+    "s": "发送文件",
+    "r": "接收文件",
     "c": "清屏",
-    "h": "16进制 开/关",
+    "h": "HEX模式 开/关",
     "l": "捕获开/关",
     "o": "选项",
     "y": "语言",
@@ -620,8 +634,13 @@ class PyComApp(App):
         self._startup_thread: threading.Thread | None = None
         self._loopback = False  # virtual echo device (no real port)
         # HEX 接收显示：当前显示行已排的字节数（跨接收块持续计数，用于按
-        # 窗口宽度在 4/8/16 字节处连续换行）
+        # 窗口宽度在 4/8/16/32 字节处连续换行）
         self._hex_row_bytes = 0
+        # HEX 模式下收到的原始字节（按固定上限保留尾部）：窗口宽度变化时
+        # 据此清空模型并按新宽度整体重排，避免 pyte 变窄时裁掉的字符丢失。
+        self._hex_raw = bytearray()
+        self._hex_per_line = 0  # 上次排版用的每行字节数
+        self._hex_pane_width = 0  # 已应用到 ASCII 分栏的宽度
 
         # 启动/连接时打印到终端的本地提示（橙/粗体），布局稳定后统一刷出
         self._pending_hints: list[str] = []
@@ -694,6 +713,8 @@ class PyComApp(App):
         self._view().focus()
         # 终端滚动时同步刷新右侧 ASCII 分栏
         self._view().on_scroll = self._refresh_hex_pane
+        # 尺寸变化后按新宽度重排 HEX 接收区（避免变窄时被裁掉的字节永久丢失）
+        self._view().on_resized = self._on_term_resized
         self.apply_config()
         # 程序一启动就打印菜单快捷键提示（无论是否连接端口）
         self._print_startup_hint()
@@ -858,15 +879,21 @@ class PyComApp(App):
         if self.cfg.hex_mode:
             if not present:
                 self._hex_row_bytes = 0  # 重新进入 HEX 模式：从头开始计行
+                self._hex_raw = bytearray()  # 原始字节缓存同样从零开始
+                self._hex_pane_width = 0  # 重新应用分栏宽度
+                self._hex_per_line = self._hex_rx_per_line()
                 self.query_one("#term-root").mount(_HexBar(id="hex-bar"), before="#bottom")
                 # 右侧 ASCII 分栏：随 HEX 模式挂载/卸载
                 self.query_one("#term-area").mount(HexAsciiPane(self._view(), id="hex-ascii-pane"))
+                # 分栏宽度跟随每行字节数：布局稳定后按当前终端区宽度设定一次
+                self.call_after_refresh(self._on_term_resized)
         else:
             if present:
                 with contextlib.suppress(Exception):
                     self.query_one("#hex-bar", Vertical).remove()
                 with contextlib.suppress(Exception):
                     self.query_one("#hex-ascii-pane").remove()
+                self._hex_pane_width = 0
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         button_id = event.button.id
@@ -879,12 +906,18 @@ class PyComApp(App):
         event.stop()
         self._send_hex_box()
 
-    def _send_hex_box(self) -> None:
-        """Parse the 16-hex input and transmit it."""
+    def _send_hex_box(self, report_empty: bool = True) -> None:
+        """Parse the 16-hex input and transmit it.
+
+        ``report_empty``: 输入框为空时是否弹出“请先输入字节”的提示。点击“发送”
+        按钮属于明确的发送意图，会给提示；在输入框里按回车则静默忽略（见
+        ``_HexArea.action_send_hex``）。
+        """
         field = self.query_one("#hex-input", TextArea)
         raw = field.text.strip()
         if not raw:
-            self.notify(tr("请先在 16 进制输入框输入字节"), severity="warning")
+            if report_empty:
+                self.notify(tr("请先在 16 进制输入框输入字节"), severity="warning")
             return
         try:
             data = parse_hex_line(raw)
@@ -950,6 +983,7 @@ class PyComApp(App):
         if self.cfg.hex_mode:
             # 16 进制接收：真实 0A/0D 只是普通数据，显示为 "0A"/"0D"，不当作
             # 换行断行；行只在累计满 N 字节（按窗口宽度取 32/16/8/4）时换行。
+            self._remember_hex_rx(data)
             text = self._format_hex_rx(data)
             if text:
                 self.model.feed_bytes(text.encode("ascii", "replace"))
@@ -958,13 +992,76 @@ class PyComApp(App):
         self._view().mark_dirty()
         self._refresh_hex_pane()
 
-    def _hex_rx_per_line(self) -> int:
-        """每行多少字节随终端显示宽度自适应（32/16/8/4）。
+    def _remember_hex_rx(self, data: bytes) -> None:
+        """累加 HEX 模式下收到的原始字节（只保留尾部固定上限）。
 
-        接收区只显示纯十六进制文本（右侧的 ASCII 列由独立的分栏显示），
-        每行最多 32 字节，以匹配分栏的固定宽度。
+        宽度变化时要用它整体重排，所以不能无限增长；上限按滚动历史容量估算
+        （历史行数 × 每行最多 32 字节），多余的旧字节丢弃。
         """
-        return hex_bytes_per_line(max(1, self.model.columns), max_bytes=32)
+        if not data:
+            return
+        self._hex_raw += data
+        limit = max(4096, self.cfg.scrollback * 32)
+        if len(self._hex_raw) > limit:
+            del self._hex_raw[:-limit]
+
+    def _hex_rx_per_line(self) -> int:
+        """接收区每行多少字节，随终端宽度自适应（32/16/8/4）。
+
+        HEX 模式下同一行除了 hex 文本（``3n-1`` 列）还有右侧 ASCII 分栏
+        （``n`` 个字符 + 1 列分隔边框），所以按整个终端区的宽度算：``4n`` 能放下
+        的最大档位。用终端区（而不是 hex 文本区）的宽度可以避免“分栏变宽 ->
+        文本区变窄 -> 每行字节数变化”的反馈环。
+        """
+        return hex_bytes_per_line(
+            self._hex_area_width(), max_bytes=_HEX_MAX_BYTES_PER_LINE, ascii_pane=True
+        )
+
+    def _hex_area_width(self) -> int:
+        """终端区（hex 文本 + ASCII 分栏）的总宽度。"""
+        with contextlib.suppress(Exception):
+            width = self.query_one("#term-area").size.width
+            if width > 0:
+                return width
+        return max(1, self.size.width)
+
+    def _update_hex_pane_width(self, per_line: int) -> None:
+        """ASCII 分栏宽度跟随每行字节数：``per_line`` 个字符 + 1 列分隔边框。"""
+        if per_line + 1 == self._hex_pane_width:
+            return
+        self._hex_pane_width = per_line + 1
+        with contextlib.suppress(Exception):
+            self.query_one("#hex-ascii-pane", HexAsciiPane).styles.width = per_line + 1
+
+    def _on_term_resized(self) -> None:
+        """终端尺寸变化：分栏宽度跟随每行字节数，字节数变了就整体重排接收区。"""
+        if not self.cfg.hex_mode:
+            return
+        per_line = self._hex_rx_per_line()
+        self._update_hex_pane_width(per_line)
+        if per_line != self._hex_per_line:
+            self._reflow_hex_rx()
+
+    def _reflow_hex_rx(self) -> None:
+        """窗口宽度变化后，按新的每行字节数重排整个 HEX 接收区。
+
+        pyte 变窄时会裁掉超出新宽度的字符，变宽后又无法还原（一行里被“挤
+        出去”的字节永久消失）。这里保留 HEX 模式下的原始字节，一旦每行字
+        节数发生变化就清空模型、按新宽度从头重排，字节一个不少。
+        """
+        if not self.cfg.hex_mode or not self._hex_raw:
+            return
+        per_line = self._hex_rx_per_line()
+        if per_line == self._hex_per_line:
+            return
+        raw = bytes(self._hex_raw)
+        self._hex_row_bytes = 0
+        self.model.clear()
+        text = self._format_hex_rx(raw)
+        if text:
+            self.model.feed_bytes(text.encode("ascii", "replace"))
+        self._view().mark_dirty()
+        self._refresh_hex_pane()
 
     def _format_hex_rx(self, data: bytes) -> str:
         """把一段接收数据排版为“每行 N 字节”的纯十六进制文本。
@@ -978,6 +1075,7 @@ class PyComApp(App):
         if not data:
             return ""
         per_line = self._hex_rx_per_line()
+        self._hex_per_line = per_line  # 记录本行排版宽度，供尺寸变化时比对
         used = self._hex_row_bytes
         if used >= per_line:  # 行宽变化后旧计数失效，重新从行首排
             used = 0
@@ -999,14 +1097,29 @@ class PyComApp(App):
         return "".join(out)
 
     # ==================================================================== key handling
+    async def on_event(self, event: Event) -> None:
+        """任意键按下即关闭左下角的 toast 提示（未连接端口 / HEX 模式等）。
+
+        必须在这里处理，而不能放在 ``_on_key`` 里：HEX 模式下焦点在 16 进制
+        输入框（``TextArea``），它会 ``event.stop()`` 掉按键（回车还带
+        ``priority`` 绑定），事件根本不冒泡到 ``_on_key``，提示框因此永远关不掉。
+        ``on_event`` 在按键被转发给焦点控件之前统一处理，任何模式下都生效；
+        关闭提示的同时按键照常执行（不吞键），避免丢掉输入的字节/十六进制位。
+
+        ``is_forwarded`` 的守卫必不可少：按键处理完后（未 stop）会带着
+        ``is_forwarded`` 再回到这里一次，若那时再清一次就会把该按键刚刚产生的
+        新提示（例如 Ctrl+A H 的“HEX 模式已开启”）一起清掉。
+        """
+        if isinstance(event, Key) and not event.is_forwarded and self._notifications:
+            self.clear_notifications()
+        await super().on_event(event)
+
     def action_noop(self) -> None:
         """Ctrl+C 由 _on_key 直接发送到串口（^C），此动作仅吞掉 Textual 默认的
         “按 ctrl+q 退出”提示，不执行任何操作。"""
 
     async def _on_key(self, event: Key) -> None:
-        # 任意键按下即关闭左侧的 toast 提示（未连接端口 / HEX 模式等）
-        if self._notifications:
-            self.clear_notifications()
+        # toast 提示的关闭已在 on_event 里统一处理（HEX 模式下按键到不了这里）
         if len(self.screen_stack) > 1:
             # A modal is on top: its widgets / screen bindings have already
             # processed this key.  Do NOT fall through to app-level bindings —
@@ -1144,10 +1257,10 @@ class PyComApp(App):
             self.push_screen(TransferMenuScreen())
         elif code == "s":
             # 先选择协议（YMODEM / ZMODEM），再进入发送界面
-            self.push_screen(ProtocolPicker(tr("选择发送协议")), callback=self._send_protocol)
+            self.push_screen(ProtocolPicker(tr("发送文件")), callback=self._send_protocol)
         elif code == "r":
             # 先选择协议（YMODEM / ZMODEM），再进入接收界面
-            self.push_screen(ProtocolPicker(tr("选择接收协议")), callback=self._recv_protocol)
+            self.push_screen(ProtocolPicker(tr("接收文件")), callback=self._recv_protocol)
         elif code == "x":
             self.push_screen(
                 ConfirmDialog(tr("退出"), tr("确定要退出 PyCom 吗？")),
@@ -1231,6 +1344,7 @@ class PyComApp(App):
         self._tx = 0
         self._rx = 0
         self._hex_row_bytes = 0  # 清屏后 HEX 行计数从头开始
+        self._hex_raw = bytearray()  # 原始字节缓存一并清空
         self._view().mark_dirty()
         self._refresh_hex_pane()
         self._refresh_status()

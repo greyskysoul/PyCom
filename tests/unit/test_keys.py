@@ -116,6 +116,18 @@ def test_hex_bytes_per_line():
     assert hex_bytes_per_line(10, max_bytes=32) == 4  # 最小兜底
 
 
+def test_hex_bytes_per_line_with_ascii_pane():
+    """带右侧 ASCII 分栏时，hex 文本（3n-1 列）与分栏（n 字符 + 1 列边框）
+    都要放进宽度：判定条件是 4n <= 宽度。"""
+    # 32 字节/行需要 128 列（32*3-1 hex + 32 字符 + 1 边框）
+    assert hex_bytes_per_line(128, max_bytes=32, ascii_pane=True) == 32
+    assert hex_bytes_per_line(127, max_bytes=32, ascii_pane=True) == 16
+    assert hex_bytes_per_line(64, max_bytes=32, ascii_pane=True) == 16
+    assert hex_bytes_per_line(63, max_bytes=32, ascii_pane=True) == 8
+    assert hex_bytes_per_line(32, max_bytes=32, ascii_pane=True) == 8
+    assert hex_bytes_per_line(31, max_bytes=32, ascii_pane=True) == 4  # 最小兜底
+
+
 def test_format_hex_lines():
     assert format_hex_lines("AABBCCDDEEFF0102", 4) == "AA BB CC DD\nEE FF 01 02"
     assert format_hex_lines("AABBCC", 16) == "AA BB CC"
