@@ -357,15 +357,15 @@ def _system_dark() -> bool | None:
     try:
         import winreg
 
-        key = winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER,
+        key = winreg.OpenKey(  # type: ignore[attr-defined]
+            winreg.HKEY_CURRENT_USER,  # type: ignore[attr-defined]
             r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
         )
         try:
-            value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+            value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")  # type: ignore[attr-defined]
             return value == 0  # 0 = dark, 1 = light
         finally:
-            winreg.CloseKey(key)
+            winreg.CloseKey(key)  # type: ignore[attr-defined]
     except Exception:
         return None
 
@@ -419,11 +419,11 @@ def _read_osc_reply(timeout: float) -> bytes:
 
         fd = sys.stdin.fileno()
         try:
-            msvcrt.setmode(fd, os.O_BINARY)
+            msvcrt.setmode(fd, os.O_BINARY)  # type: ignore[attr-defined]
         except Exception:
             return b""
         while time.monotonic() < deadline:
-            if msvcrt.kbhit():
+            if msvcrt.kbhit():  # type: ignore[attr-defined]
                 ch = os.read(fd, 1)
                 if not ch:
                     break
@@ -475,11 +475,11 @@ def _query_osc11(timeout: float) -> bytes | None:
         from ctypes import wintypes
 
         fd = sys.stdin.fileno()
-        kernel32 = ctypes.windll.kernel32
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
         handle = kernel32.GetStdHandle(-10)  # STD_INPUT_HANDLE
         mode = wintypes.DWORD()
         try:
-            msvcrt.setmode(fd, os.O_BINARY)
+            msvcrt.setmode(fd, os.O_BINARY)  # type: ignore[attr-defined]
             if not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
                 return None
             # clear ENABLE_LINE_INPUT (0x0002) + ENABLE_ECHO_INPUT (0x0004)
