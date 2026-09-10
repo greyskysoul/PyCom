@@ -97,7 +97,6 @@ class _OptionsRich(Vertical):
                         _decode_options(), id="decode", allow_blank=False, compact=True
                     )
             with TabPane(tr("\u5916\u89c2")):
-                yield _CircleCheckbox(tr("16 进制接收/发送（HEX）"), id="hex", compact=True)
                 with Horizontal(classes="form-row"):
                     yield Label(tr("\u4e3b\u9898"), classes="form-label")
                     yield FieldSelect(_theme_options(), id="theme", allow_blank=False, compact=True)
@@ -143,7 +142,6 @@ class _OptionsCompact(Vertical):
                     FieldSelect(_decode_options(), id="decode", allow_blank=False, compact=True),
                 )
             with TabPane(tr("\u5916\u89c2")):
-                yield _CircleCheckbox(tr("16 进制接收/发送（HEX）"), id="hex", compact=True)
                 yield from _field_row(
                     tr("\u4e3b\u9898"),
                     FieldSelect(_theme_options(), id="theme", allow_blank=False, compact=True),
@@ -189,7 +187,6 @@ class OptionsScreen(AdaptiveModal):
         self.query_one("#rx_lf", Checkbox).value = cfg.rx_add_lf
         self.query_one("#ts", Checkbox).value = cfg.capture_timestamps
         self.query_one("#vt", Checkbox).value = cfg.send_vt_sequences
-        self.query_one("#hex", Checkbox).value = cfg.hex_mode
         # 下拉框：仅当配置值合法时才选中它，否则回退到第一个选项
         enter = self.query_one("#enter", FieldSelect)
         enter.value = cfg.enter_sends if cfg.enter_sends in _ENTER_VALUES else "cr"
@@ -219,7 +216,6 @@ class OptionsScreen(AdaptiveModal):
         cfg.rx_add_lf = self.query_one("#rx_lf", Checkbox).value
         cfg.capture_timestamps = self.query_one("#ts", Checkbox).value
         cfg.send_vt_sequences = self.query_one("#vt", Checkbox).value
-        cfg.hex_mode = self.query_one("#hex", Checkbox).value
         # 下拉框值必然合法，无需再校验
         cfg.enter_sends = str(self.query_one("#enter", FieldSelect).value)
         cfg.backspace_sends = str(self.query_one("#back", FieldSelect).value)

@@ -157,10 +157,13 @@ Static#help-title, Static#picker-title, Static#confirm-title {
 
 .form-row Input {
     width: 18;
+    /* 同行后面还有项目时留出间隔，避免控件与下一个标签/控件贴在一起 */
+    margin-right: 2;
 }
 
 .form-row Select {
     width: 18;
+    margin-right: 2;
 }
 
 #conn-box DataTable {
@@ -259,15 +262,9 @@ MainMenuScreen {
     overflow-y: auto;
     background: $surface;
     border: round $border;
-    padding: 0 0 1 0;
-    /* 底部留 1 行：菜单向上展开时避开最底行的状态栏（#bottom） */
+    /* \u9876\u90e8/\u5e95\u90e8\u5404\u7559 1 \u884c\uff1a\u9876\u90e8\u66ff\u4ee3\u539f\u6807\u9898\u5360\u4f4d\uff0c\u5e95\u90e8\u907f\u5f00\u72b6\u6001\u680f\uff08#bottom\uff09 */
+    padding: 1 0 1 0;
     margin: 0 0 1 0;
-}
-
-#menu-title {
-    text-style: bold;
-    color: $text;
-    margin: 1 2;
 }
 
 #menu-popup Button.menu-item {

@@ -18,7 +18,7 @@ from textual.containers import Vertical
 from textual.dom import DOMNode
 from textual.events import Click, Key
 from textual.screen import Screen
-from textual.widgets import Button, Static
+from textual.widgets import Button
 
 from pycom.i18n import tr
 
@@ -51,7 +51,6 @@ class MainMenuScreen(Screen):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="menu-popup"):
-            yield Static(tr("功能菜单"), id="menu-title")
             for key, label in self._rows:
                 yield Button(
                     f"  {key}   {label}",

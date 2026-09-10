@@ -1461,7 +1461,6 @@ async def test_options_compact_on_small_window():
             "rx_lf",
             "ts",
             "vt",
-            "hex",
             "enter",
             "back",
             "decode",
