@@ -38,7 +38,7 @@ from pycom.screens.about import AboutScreen
 from pycom.screens.base import ConfirmDialog
 from pycom.screens.connection import ConnectionScreen
 from pycom.screens.language import LanguageScreen
-from pycom.screens.menu_popup import MainMenuPopup
+from pycom.screens.menu_popup import MainMenuScreen
 from pycom.screens.options import OptionsScreen
 from pycom.screens.transfer import VALID_PROTOCOLS, ProtocolPicker, RecvScreen, SendScreen
 from pycom.screens.transfermenu import TransferMenuScreen
@@ -257,9 +257,12 @@ _DARK_VARIABLES: dict[str, str] = {
     "checkbox-fg": "#dcdfe4",
     "toggle-off": "#5c6370",
     "compact-bg": "#282c34",
-    "menu-btn-bg": "#3d6ea5",
+    "menu-btn-bg": "#3b82f6",
     "menu-btn-fg": "#ffffff",
-    "menu-btn-hover-bg": "#4a7fb5",
+    "menu-btn-hover-bg": "#4a90e0",
+    "primary-btn-bg": "#3b82f6",
+    "primary-btn-fg": "#ffffff",
+    "primary-btn-hover-bg": "#4a90e0",
     "table-header-bg": "#3a4048",
     "table-header-fg": "#dcdfe4",
 }
@@ -288,9 +291,12 @@ _LIGHT_VARIABLES: dict[str, str] = {
     "checkbox-fg": "#383a42",
     "toggle-off": "#a0a1a7",
     "compact-bg": "#f0f0f0",
-    "menu-btn-bg": "#7fb8e0",
-    "menu-btn-fg": "#1f2328",
-    "menu-btn-hover-bg": "#8ec4e8",
+    "menu-btn-bg": "#4a90d9",
+    "menu-btn-fg": "#ffffff",
+    "menu-btn-hover-bg": "#5ba0e0",
+    "primary-btn-bg": "#4a90d9",
+    "primary-btn-fg": "#ffffff",
+    "primary-btn-hover-bg": "#5ba0e0",
     "table-header-bg": "#e5e5e5",
     "table-header-fg": "#383a42",
 }
@@ -1123,9 +1129,9 @@ class PyComApp(App):
 
     def _open_menu(self) -> None:
         """Open the floating main-menu popup anchored at the bottom-left."""
-        if self.query("#menu-popup"):
+        if isinstance(self.screen, MainMenuScreen):
             return  # already open
-        self.screen.mount(MainMenuPopup(self.menu_action))
+        self.push_screen(MainMenuScreen(self.menu_action))
 
     # ======================================================================== actions
     def menu_action(self, code: str) -> None:

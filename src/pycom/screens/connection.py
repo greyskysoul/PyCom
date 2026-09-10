@@ -7,7 +7,7 @@ from typing import Any
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.widgets import Button, DataTable, Input, Label, Select, Static
+from textual.widgets import Button, Collapsible, DataTable, Input, Label, Select, Static
 
 from pycom.config import ConnectionSettings
 from pycom.i18n import tr
@@ -38,16 +38,18 @@ class _ConnRich(Vertical):
         with Horizontal(classes="form-row"):
             yield Label(tr("波特率"), classes="form-label")
             yield Input("", id="baud", placeholder=_PORT_PLACEHOLDERS["baud"], compact=True)
-            yield Label(tr("数据位"), classes="form-label")
-            yield Input("", id="bytesize", placeholder=_PORT_PLACEHOLDERS["bytesize"], compact=True)
-        with Horizontal(classes="form-row"):
-            yield Label(tr("校验"), classes="form-label")
-            yield Input("", id="parity", placeholder=_PORT_PLACEHOLDERS["parity"], compact=True)
-            yield Label(tr("停止位"), classes="form-label")
-            yield Input("", id="stopbits", placeholder=_PORT_PLACEHOLDERS["stopbits"], compact=True)
-        with Horizontal(classes="form-row"):
-            yield Label(tr("流控"), classes="form-label")
-            yield Input("", id="flow", placeholder=_PORT_PLACEHOLDERS["flow"], compact=True)
+        # 数据位/校验/停止位/流控 属于不常用参数，默认折叠在“高级参数”里
+        with Collapsible(title=tr("高级参数"), collapsed=True, id="adv-params"):
+            with Horizontal(classes="form-row"):
+                yield Label(tr("数据位"), classes="form-label")
+                yield Input("", id="bytesize", placeholder=_PORT_PLACEHOLDERS["bytesize"], compact=True)
+                yield Label(tr("校验"), classes="form-label")
+                yield Input("", id="parity", placeholder=_PORT_PLACEHOLDERS["parity"], compact=True)
+            with Horizontal(classes="form-row"):
+                yield Label(tr("停止位"), classes="form-label")
+                yield Input("", id="stopbits", placeholder=_PORT_PLACEHOLDERS["stopbits"], compact=True)
+                yield Label(tr("流控"), classes="form-label")
+                yield Input("", id="flow", placeholder=_PORT_PLACEHOLDERS["flow"], compact=True)
         with Horizontal(id="conn-buttons"):
             yield from _action_buttons()
         yield Label("", id="conn-error")
@@ -70,22 +72,31 @@ class _ConnCompact(Vertical):
                     compact=True,
                     prompt=tr("检测到的串口"),
                 )
-            for label in ("波特率", "数据位", "校验", "停止位", "流控"):
-                cid = {
-                    "波特率": "baud",
-                    "数据位": "bytesize",
-                    "校验": "parity",
-                    "停止位": "stopbits",
-                    "流控": "flow",
-                }[label]
-                with Horizontal(classes="c-row"):
-                    yield Label(tr(label), classes="c-label")
-                    yield Input(
-                        "",
-                        id=cid,
-                        placeholder=_PORT_PLACEHOLDERS[cid],
-                        compact=True,
-                    )
+            with Horizontal(classes="c-row"):
+                yield Label(tr("波特率"), classes="c-label")
+                yield Input(
+                    "",
+                    id="baud",
+                    placeholder=_PORT_PLACEHOLDERS["baud"],
+                    compact=True,
+                )
+            # 数据位/校验/停止位/流控 属于不常用参数，默认折叠在“高级参数”里
+            with Collapsible(title=tr("高级参数"), collapsed=True, id="adv-params"):
+                for label in ("数据位", "校验", "停止位", "流控"):
+                    cid = {
+                        "数据位": "bytesize",
+                        "校验": "parity",
+                        "停止位": "stopbits",
+                        "流控": "flow",
+                    }[label]
+                    with Horizontal(classes="c-row"):
+                        yield Label(tr(label), classes="c-label")
+                        yield Input(
+                            "",
+                            id=cid,
+                            placeholder=_PORT_PLACEHOLDERS[cid],
+                            compact=True,
+                        )
         with Horizontal(id="conn-buttons"):
             yield from _action_buttons()
         yield Label("", id="conn-error")

@@ -155,6 +155,7 @@ _EN: dict[str, str] = {
     "取消": "Cancel",
     # --- connection ---
     "串口连接参数": "Serial connection",
+    "高级参数": "Advanced",
     "端口": "Port",
     "描述": "Description",
     "校验": "Parity",

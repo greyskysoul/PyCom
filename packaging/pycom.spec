@@ -65,7 +65,6 @@ a = Analysis(
         "_multiprocessing",
         "_wmi",
         # Textual 未使用、且未被核心/已用组件引用的组件
-        "textual.widgets._collapsible",
         "textual.widgets._content_switcher",
         "textual.widgets._digits",
         "textual.widgets._footer",

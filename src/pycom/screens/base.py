@@ -14,6 +14,7 @@ from textual.widget import Widget
 from textual.widgets import (
     Button,
     Checkbox,
+    Collapsible,
     DataTable,
     DirectoryTree,
     Input,
@@ -21,6 +22,7 @@ from textual.widgets import (
     Select,
     Static,
 )
+from textual.widgets._collapsible import CollapsibleTitle
 
 from pycom.i18n import tr
 
@@ -36,13 +38,29 @@ class FieldSelect(Select, inherit_bindings=False):
     BINDINGS = [Binding("enter,space", "show_overlay", "打开", show=False)]
 
 
+def _is_effectively_displayed(widget: Widget) -> bool:
+    """True when the widget and every ancestor is displayed.
+
+    ``Widget.display`` only reflects the node's own ``display`` rule, so a
+    field inside a collapsed ``Collapsible`` still reports ``display=True``
+    even though its ``Contents`` is ``display:none``.  Walk the ancestors so
+    arrow-key navigation skips fields hidden by a collapsed container.
+    """
+    node: Widget | None = widget
+    while node is not None:
+        if not node.display:
+            return False
+        node = node.parent
+    return True
+
+
 def _arrow_targets(screen: Screen) -> list[Widget]:
     """Focusable fields of a dialog, sorted by position (row-major)."""
     targets: list[Widget] = [
         w
         for w in screen.walk_children()
-        if isinstance(w, (Button, Checkbox, Input, Select))
-        and w.display
+        if isinstance(w, (Button, Checkbox, Input, Select, CollapsibleTitle))
+        and _is_effectively_displayed(w)
         and not w.disabled
         and w.can_focus
     ]
@@ -209,8 +227,10 @@ class AdaptiveModal(ModalBase):
     def _capture_values(self) -> dict[str, object]:
         captured: dict[str, object] = {}
         for widget in self.query(f"#{self.ROOT_ID} *"):
-            if widget.id and isinstance(widget, (Checkbox, Input, Select)):
-                captured[widget.id] = widget.value
+            if widget.id and isinstance(widget, (Checkbox, Input, Select, Collapsible)):
+                captured[widget.id] = (
+                    widget.collapsed if isinstance(widget, Collapsible) else widget.value
+                )
         return captured
 
     def _restore_values(self, captured: dict[str, object]) -> None:
@@ -227,6 +247,8 @@ class AdaptiveModal(ModalBase):
             elif isinstance(widget, Select):
                 with contextlib.suppress(Exception):
                     widget.value = value  # type: ignore[assignment]
+            elif isinstance(widget, Collapsible):
+                widget.collapsed = bool(value)
 
 
 class ResponsiveCompact(ModalBase):

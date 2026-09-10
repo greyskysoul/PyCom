@@ -172,9 +172,9 @@ async def test_english_menu_renders_english_labels():
         await pilot.pause()
         app._open_menu()
         await pilot.pause(0.2)
-        assert "Serial port" in str(app.query_one("#menu-p").render())
-        assert "Quit" in str(app.query_one("#menu-x").render())
-        assert "Data transfer" in str(app.query_one("#menu-d").render())
+        assert "Serial port" in str(app.screen.query_one("#menu-p").render())
+        assert "Quit" in str(app.screen.query_one("#menu-x").render())
+        assert "Data transfer" in str(app.screen.query_one("#menu-d").render())
 
 
 async def test_main_menu_has_no_self_referential_item():
@@ -183,4 +183,4 @@ async def test_main_menu_has_no_self_referential_item():
         await pilot.pause()
         app._open_menu()
         await pilot.pause(0.2)
-        assert len(app.query("#menu-z")) == 0
+        assert len(app.screen.query("#menu-z")) == 0

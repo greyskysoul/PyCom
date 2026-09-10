@@ -24,6 +24,8 @@ async def test_app_starts_and_renders_device_output():
 
 
 async def test_ctrl_a_prefix_opens_menu():
+    from pycom.screens.menu_popup import MainMenuScreen
+
     app = PyComApp()
     async with app.run_test(size=(100, 28)) as pilot:
         await pilot.pause()
@@ -32,12 +34,14 @@ async def test_ctrl_a_prefix_opens_menu():
         await pilot.press("ctrl+a")
         await pilot.press("z")
         await pilot.pause()
-        assert len(app.screen_stack) == 1, "popup must not push a new screen"
-        assert len(app.query("#menu-popup")) == 1, "main-menu popup should be shown"
+        assert len(app.screen_stack) == 2, "menu is a pushed screen"
+        assert isinstance(app.screen, MainMenuScreen), "menu screen should be on top"
+        assert len(app.screen.query("#menu-popup")) == 1, "main-menu popup should be shown"
 
         await pilot.press("escape")
         await pilot.pause()
-        assert len(app.query("#menu-popup")) == 0, "escape should close the popup"
+        assert len(app.screen_stack) == 1, "escape should pop the menu screen"
+        assert len(app.screen.query("#menu-popup")) == 0, "escape should close the popup"
 
 
 async def test_prefix_cancel_with_escape():
@@ -646,6 +650,8 @@ async def test_options_checkboxes_use_circle_markers():
 async def test_connection_page_compact_and_left_aligned_buttons():
     """Connection inputs are single-line; buttons sit on their own row at the
     left; the old 断开 button was replaced by 返回."""
+    from textual.widgets import Collapsible
+
     from pycom.screens.connection import ConnectionScreen
 
     app = PyComApp()
@@ -654,6 +660,12 @@ async def test_connection_page_compact_and_left_aligned_buttons():
         app.push_screen(ConnectionScreen())
         await pilot.pause(0.3)
         scr = app.screen_stack[-1]
+
+        # 高级参数默认折叠；展开后 5 个字段都是单行
+        adv = scr.query_one("#adv-params", Collapsible)
+        assert adv.collapsed is True
+        adv.collapsed = False
+        await pilot.pause(0.2)
 
         for field_id in ("baud", "bytesize", "parity", "stopbits", "flow"):
             assert scr.query_one(f"#{field_id}").region.height == 1
@@ -674,6 +686,112 @@ async def test_connection_page_compact_and_left_aligned_buttons():
         await pilot.press("enter")
         await pilot.pause(0.2)
         assert len(app.screen_stack) == 1
+
+
+async def test_connection_advanced_params_collapsed_by_default():
+    """高级参数（数据位/校验/停止位/流控）默认折叠，隐藏字段不可见。"""
+    from textual.widgets import Collapsible
+
+    from pycom.screens.connection import ConnectionScreen
+
+    app = PyComApp()
+    async with app.run_test(size=(100, 34)) as pilot:
+        await pilot.pause()
+        app.push_screen(ConnectionScreen())
+        await pilot.pause(0.3)
+        scr = app.screen_stack[-1]
+
+        adv = scr.query_one("#adv-params", Collapsible)
+        assert adv.collapsed is True
+        # 折叠时隐藏字段不参与布局（region 为零），方向键导航会跳过它们
+        for field_id in ("bytesize", "parity", "stopbits", "flow"):
+            assert scr.query_one(f"#{field_id}").region.height == 0
+        # 波特率始终可见
+        assert scr.query_one("#baud").region.height == 1
+
+
+async def test_connection_advanced_params_toggle_shows_fields():
+    """展开高级参数后字段可见，方向键可聚焦标题、Enter 可再次折叠。"""
+    from textual.widgets import Collapsible
+
+    from pycom.screens.connection import ConnectionScreen
+
+    app = PyComApp()
+    async with app.run_test(size=(100, 34)) as pilot:
+        await pilot.pause()
+        app.push_screen(ConnectionScreen())
+        await pilot.pause(0.3)
+        scr = app.screen_stack[-1]
+
+        adv = scr.query_one("#adv-params", Collapsible)
+        adv.collapsed = False
+        await pilot.pause(0.2)
+        for field_id in ("bytesize", "parity", "stopbits", "flow"):
+            assert scr.query_one(f"#{field_id}").region.height == 1
+
+        # 方向键可聚焦到折叠标题，Enter 可再次折叠
+        title = scr.query_one("#adv-params CollapsibleTitle")
+        title.focus()
+        await pilot.pause(0.02)
+        await pilot.press("enter")
+        await pilot.pause(0.2)
+        assert adv.collapsed is True
+
+
+async def test_connection_advanced_params_values_survive_collapse():
+    """折叠/展开不丢失已填写的参数值。"""
+    from textual.widgets import Collapsible, Input
+
+    from pycom.screens.connection import ConnectionScreen
+
+    app = PyComApp()
+    async with app.run_test(size=(100, 34)) as pilot:
+        await pilot.pause()
+        app.push_screen(ConnectionScreen())
+        await pilot.pause(0.3)
+        scr = app.screen_stack[-1]
+
+        adv = scr.query_one("#adv-params", Collapsible)
+        adv.collapsed = False
+        await pilot.pause(0.2)
+        scr.query_one("#bytesize", Input).value = "7"
+        scr.query_one("#parity", Input).value = "E"
+        scr.query_one("#stopbits", Input).value = "2"
+        scr.query_one("#flow", Input).value = "rtscts"
+        adv.collapsed = True
+        await pilot.pause(0.2)
+        adv.collapsed = False
+        await pilot.pause(0.2)
+        assert scr.query_one("#bytesize", Input).value == "7"
+        assert scr.query_one("#parity", Input).value == "E"
+        assert scr.query_one("#stopbits", Input).value == "2"
+        assert scr.query_one("#flow", Input).value == "rtscts"
+
+
+async def test_connection_advanced_params_state_survives_compact_swap():
+    """富↔简洁切换保留高级参数的折叠状态。"""
+    from textual.widgets import Collapsible
+
+    from pycom.screens.connection import ConnectionScreen
+
+    app = PyComApp()
+    async with app.run_test(size=(100, 34)) as pilot:
+        await pilot.pause()
+        app.push_screen(ConnectionScreen())
+        await pilot.pause(0.3)
+        scr = app.screen_stack[-1]
+        adv = scr.query_one("#adv-params", Collapsible)
+        adv.collapsed = False
+        await pilot.pause(0.2)
+
+        # 缩到小窗口切简洁模式，再放大切回富布局
+        await pilot.resize_terminal(58, 15)
+        await pilot.pause(0.4)
+        assert scr.query_one("#conn-box").has_class("compact") is True
+        await pilot.resize_terminal(100, 34)
+        await pilot.pause(0.4)
+        assert scr.query_one("#conn-box").has_class("compact") is False
+        assert scr.query_one("#adv-params", Collapsible).collapsed is False
 
 
 # --------------------------------------------------------------------------- new behaviour
@@ -732,10 +850,10 @@ async def test_hex_menu_toggle_mounts_and_removes_bar():
         await pilot.press("ctrl+a")
         await pilot.press("z")
         await pilot.pause(0.2)
-        assert len(app.query("#menu-popup")) == 1
+        assert len(app.screen.query("#menu-popup")) == 1
         await pilot.press("escape")
         await pilot.pause(0.1)
-        assert len(app.query("#menu-popup")) == 0
+        assert len(app.screen.query("#menu-popup")) == 0
 
         # toggling off removes the bar again -> normal DOM restored
         await pilot.press("ctrl+a")
@@ -1504,7 +1622,7 @@ async def test_main_menu_popup_usable_on_small_window():
         await pilot.press("ctrl+a")
         await pilot.press("z")
         await pilot.pause(0.3)
-        assert len(app.query("#menu-popup")) == 1
+        assert len(app.screen.query("#menu-popup")) == 1
         assert app.focused.id == "menu-p"
         # 遍历到最后一项
         for _ in range(8):
@@ -1513,7 +1631,7 @@ async def test_main_menu_popup_usable_on_small_window():
         assert app.focused.id == "menu-x"
         await pilot.press("escape")
         await pilot.pause(0.2)
-        assert len(app.query("#menu-popup")) == 0
+        assert len(app.screen.query("#menu-popup")) == 0
 
 
 async def test_notifications_cleared_by_any_key():
@@ -1569,7 +1687,7 @@ async def test_main_screen_menu_button_bottom_left_opens_menu():
         # 点击打开主菜单（与 Ctrl+A Z 等价，弹出式弹层）
         await pilot.click("#menu-btn")
         await pilot.pause(0.3)
-        assert len(app.query("#menu-popup")) == 1, "菜单按钮应打开主菜单弹层"
+        assert len(app.screen.query("#menu-popup")) == 1, "菜单按钮应打开主菜单弹层"
 
 
 async def test_startup_hint_shown_without_connection():
@@ -1696,7 +1814,7 @@ async def test_main_menu_shows_about_and_clean_copy():
         await pilot.press("ctrl+a")
         await pilot.press("z")
         await pilot.pause(0.2)
-        popup = app.query_one("#menu-popup")
+        popup = app.screen.query_one("#menu-popup")
         # 关于信息不再停留在主菜单底部（已移入关于页）
         assert len(popup.query("#help-about")) == 0
         assert len(popup.query("#help-repo")) == 0

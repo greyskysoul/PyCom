@@ -29,7 +29,7 @@ Screen {
     height: 1fr;
     background: $hex-bg;
     color: $term-fg;
-    border-left: ascii $border;
+    border-left: round $border;
     padding: 0 1;
     overflow: hidden;
 }
@@ -85,17 +85,19 @@ SelectCurrent:hover {
 }
 /* primary 按钮保持蓝色（App CSS 会覆盖 Textual 默认 CSS，需显式恢复） */
 Button.-primary {
-    background: $primary-muted;
+    background: $primary-btn-bg;
+    color: $primary-btn-fg;
 }
 Button.-primary:hover {
-    background: $primary;
+    background: $primary-btn-hover-bg;
+    color: $primary-btn-fg;
 }
 
 /* --- 16 进制接收/发送输入条（仅在 HEX 模式开启时挂载） ----------------------- */
 #hex-bar {
     height: auto;
     background: $hex-bg;
-    border-top: ascii #2a3142;
+    border-top: round #2a3142;
     padding: 0 1;
 }
 
@@ -128,8 +130,8 @@ Vertical#help-box, Vertical#picker-box, Vertical#confirm {
     height: auto;
     max-height: 90%;
     background: $surface;
-    /* ascii 边框：老式 conhost/低版本 PowerShell 也能正确显示 */
-    border: ascii $border;
+    /* round 圆角边框：Windows Terminal / 现代 conhost 均正常显示 */
+    border: round $border;
     padding: 1 2;
     margin: 2 4;
 }
@@ -202,6 +204,27 @@ DataTable > .datatable--header {
     margin-top: 1;
 }
 
+/* 连接页“高级参数”折叠容器：去掉内置边框/缩进，保持字段列对齐 */
+#conn-box Collapsible {
+    border-top: none;
+    padding-bottom: 0;
+    padding-left: 0;
+}
+
+#conn-box Collapsible > Contents {
+    padding: 0;
+}
+
+#conn-box CollapsibleTitle {
+    color: $label;
+    text-style: bold;
+}
+
+/* 折叠容器内第一行字段紧贴标题，避免多出一行空隙 */
+#conn-box Collapsible .form-row:first-of-type {
+    margin-top: 0;
+}
+
 /* 选项/连接盒体收紧到内容宽度：即使行内并排两对字段也不撑满/溢边 */
 Vertical#options-box, Vertical#conn-box {
     max-width: 80;
@@ -218,15 +241,14 @@ Vertical#xfer-box {
 }
 
 /* 左下角浮动功能菜单（弹出式，替换旧的整屏菜单界面）：
-   透明全屏覆盖层负责捕获框外点击来关闭菜单，真正的内容框锚定在左下角
-   （其底部贴着屏幕底缘，悬浮在终端上方）。 */
-#popup-overlay {
-    position: absolute;
-    overlay: screen;
-    width: 100%;
-    height: 100%;
+   推入的 Screen + 半透明背景：底层终端内容与状态栏变暗但可见（UI 应用
+   弹出菜单效果）；&:ansi 时退回透明（老式终端不变暗，内容仍透出）。 */
+MainMenuScreen {
+    background: $background 60%;
     align: left bottom;
-    background: transparent;
+    &:ansi {
+        background: transparent;
+    }
 }
 
 #menu-popup {
@@ -236,9 +258,10 @@ Vertical#xfer-box {
     max-height: 100%;
     overflow-y: auto;
     background: $surface;
-    border: ascii $border;
+    border: round $border;
     padding: 0 0 1 0;
-    margin: 0;
+    /* 底部留 1 行：菜单向上展开时避开最底行的状态栏（#bottom） */
+    margin: 0 0 1 0;
 }
 
 #menu-title {
@@ -335,7 +358,8 @@ Vertical#xfer-box {
     overflow-y: auto;
 }
 #options-body ContentTabs {
-    background: $panel;
+    /* 用 $surface 而非 $panel：亮色主题下 $panel 是灰色，会让 tab 条发灰 */
+    background: $surface;
 }
 
 /* 输入行之间不再隔行（紧凑）；仅在与上方开关组之间留一行分隔 */
@@ -420,7 +444,7 @@ Vertical#xfer-box {
 
 /* 下拉展开列表 */
 #options-body Select > SelectOverlay {
-    border: ascii $border;
+    border: round $border;
     background: $panel;
     max-height: 8;
     padding: 0;
@@ -466,7 +490,7 @@ Vertical#xfer-box {
 #picker-tree {
     height: 16;
     margin-top: 1;
-    border: ascii $border;
+    border: round $border;
 }
 
 #picker-tree DataTable {
@@ -557,7 +581,7 @@ Vertical#conn-box.compact #conn-body {
 
 /* 简洁模式选项页：下拉框/输入框沿用原有底色外观 */
 #options-box.compact .c-row Select > SelectOverlay {
-    border: ascii $border;
+    border: round $border;
     background: $panel;
     max-height: 8;
     padding: 0;
@@ -612,7 +636,7 @@ Vertical#conn-box.compact #conn-body {
 }
 
 #conn-box.compact Select > SelectOverlay {
-    border: ascii $border;
+    border: round $border;
     background: $panel;
     max-height: 8;
     padding: 0;

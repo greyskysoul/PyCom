@@ -1,9 +1,10 @@
 """Floating main-menu popup that replaces the old full-screen menu screen.
 
-The popup is mounted into the main screen as an overlay and anchored at the
-bottom-left, so it floats above the terminal (the anchor is the 菜单 button in
-the bottom row).  Arrow keys move the highlight, Enter / Space or the leading
-letter runs an item, Esc or clicking outside the box closes it.
+The menu is a pushed Screen with a translucent background, so the terminal
+content and status bar behind it stay visible (dimmed) — like a UI app's
+popup menu.  The menu box is anchored at the bottom-left (the anchor is the
+菜单 button in the bottom row).  Arrow keys move the highlight, Enter / Space
+or the leading letter runs an item, Esc or clicking outside the box closes it.
 """
 
 from __future__ import annotations
@@ -13,9 +14,10 @@ from collections.abc import Callable
 from functools import partial
 
 from textual.app import ComposeResult
-from textual.containers import Container, Vertical
+from textual.containers import Vertical
 from textual.dom import DOMNode
 from textual.events import Click, Key
+from textual.screen import Screen
 from textual.widgets import Button, Static
 
 from pycom.i18n import tr
@@ -34,16 +36,16 @@ MAIN_MENU = [
 ]
 
 
-class MainMenuPopup(Container):
+class MainMenuScreen(Screen):
     """Bottom-left floating menu listing the main functions.
 
-    Mount into the main screen with :meth:`~textual.dom.DOMNode.mount`; the
-    widget removes itself from the DOM when an item is picked or it is closed.
-    ``on_pick`` receives the single-letter action code (see ``menu_action``).
+    Push with :meth:`~textual.app.App.push_screen`; the screen pops itself
+    when an item is picked or it is closed.  ``on_pick`` receives the
+    single-letter action code (see ``menu_action``).
     """
 
     def __init__(self, on_pick: Callable[[str], None]) -> None:
-        super().__init__(id="popup-overlay")
+        super().__init__()
         self._rows = [(key, tr(label)) for key, label in MAIN_MENU]
         self._on_pick = on_pick
 
@@ -67,7 +69,7 @@ class MainMenuPopup(Container):
 
     def _close(self) -> None:
         with contextlib.suppress(Exception):
-            self.remove()
+            self.dismiss()
 
     def _pick(self, code: str) -> None:
         self._close()
