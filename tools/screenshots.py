@@ -5,18 +5,18 @@ Run from the repository root:
 
 Each screenshot drives the real app with Textual's headless pilot, feeds some
 demo data, then writes an SVG (GitHub renders SVGs inline) into
-``docs/screenshots/``.
+``docs/screenshots/``.  Two sets are produced: the English UI (``main.svg``,
+``hex.svg``, ``menu.svg``, ``options.svg``) for README.md and the Chinese UI
+(``*-zh.svg``) for README.zh-CN.md.
 """
 
 from __future__ import annotations
 
 import asyncio
-import os
 from pathlib import Path
 
 from pycom.app import PyComApp
 from pycom.config import AppConfig
-from pycom.screens.options import OptionsScreen
 
 OUT = Path(__file__).resolve().parent.parent / "docs" / "screenshots"
 
@@ -48,9 +48,10 @@ async def _shot(app: PyComApp, pilot, name: str, title: str) -> None:
     _save(app.export_screenshot(title=title, simplify=True), name)
 
 
-async def main() -> None:
+async def _generate(lang: str, suffix: str) -> None:
+    """Generate all four screenshots in the given UI language."""
     # -- 1. main terminal (loopback + demo device output) -----------------------
-    app = PyComApp(cfg=AppConfig(language="en", hex_mode=False))
+    app = PyComApp(cfg=AppConfig(language=lang, hex_mode=False))
     async with app.run_test(size=(110, 30)) as pilot:
         await pilot.pause(0.3)
         app.open_loopback()
@@ -58,35 +59,40 @@ async def main() -> None:
         await pilot.pause(0.3)
         app.model.feed_bytes(MAIN_DEMO)
         app._view().mark_dirty()
-        await _shot(app, pilot, "main.svg", "PyCom - main terminal")
+        await _shot(app, pilot, f"main{suffix}.svg", f"PyCom - main terminal")
 
     # -- 2. main menu popup ------------------------------------------------------
-    app = PyComApp(cfg=AppConfig(language="en", hex_mode=False))
+    app = PyComApp(cfg=AppConfig(language=lang, hex_mode=False))
     async with app.run_test(size=(110, 30)) as pilot:
         await pilot.pause(0.3)
         app.model.feed_bytes(MAIN_DEMO)
         app._view().mark_dirty()
         await pilot.press("ctrl+a")
         await pilot.press("z")
-        await _shot(app, pilot, "menu.svg", "PyCom - main menu")
+        await _shot(app, pilot, f"menu{suffix}.svg", f"PyCom - main menu")
 
     # -- 3. HEX receive with ASCII pane -----------------------------------------
-    app = PyComApp(cfg=AppConfig(language="en", hex_mode=True))
+    app = PyComApp(cfg=AppConfig(language=lang, hex_mode=True))
     async with app.run_test(size=(110, 30)) as pilot:
         await pilot.pause(0.3)
         app.open_loopback()
         await pilot.pause(0.3)
         app._rx_to_terminal(HEX_DEMO)
         await pilot.pause(0.3)
-        await _shot(app, pilot, "hex.svg", "PyCom - HEX mode with ASCII pane")
+        await _shot(app, pilot, f"hex{suffix}.svg", f"PyCom - HEX mode with ASCII pane")
 
     # -- 4. options screen -------------------------------------------------------
-    app = PyComApp(cfg=AppConfig(language="en", hex_mode=False))
+    app = PyComApp(cfg=AppConfig(language=lang, hex_mode=False))
     async with app.run_test(size=(110, 30)) as pilot:
         await pilot.pause(0.3)
         await pilot.press("ctrl+a")
         await pilot.press("o")
-        await _shot(app, pilot, "options.svg", "PyCom - options")
+        await _shot(app, pilot, f"options{suffix}.svg", f"PyCom - options")
+
+
+async def main() -> None:
+    await _generate("en", "")      # English UI -> main.svg / hex.svg / ...
+    await _generate("zh", "-zh")   # Chinese UI -> main-zh.svg / hex-zh.svg / ...
 
 
 if __name__ == "__main__":

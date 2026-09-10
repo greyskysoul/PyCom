@@ -22,18 +22,18 @@
 ## 界面预览
 
 <p align="center">
-  <img src="docs/screenshots/main.svg" alt="主界面" width="75%">
+  <img src="docs/screenshots/main-zh.svg" alt="主界面" width="75%">
   <br><sub>主界面 — 设备 ANSI/VT 输出、滚动回看与实时 TX/RX 计数</sub>
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/hex.svg" alt="HEX 模式（右侧 ASCII 分栏）" width="75%">
+  <img src="docs/screenshots/hex-zh.svg" alt="HEX 模式（右侧 ASCII 分栏）" width="75%">
   <br><sub>HEX 模式 — 左侧十六进制字节，右侧分栏显示可打印 ASCII（其余为灰色圆点）</sub>
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/menu.svg" alt="功能菜单弹层" width="45%">
-  <img src="docs/screenshots/options.svg" alt="设置" width="45%">
+  <img src="docs/screenshots/menu-zh.svg" alt="功能菜单弹层" width="45%">
+  <img src="docs/screenshots/options-zh.svg" alt="设置" width="45%">
   <br><sub>Ctrl+A 功能菜单弹层与设置</sub>
 </p>
 
