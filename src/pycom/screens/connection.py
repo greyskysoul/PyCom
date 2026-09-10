@@ -127,6 +127,12 @@ class ConnectionScreen(AdaptiveModal):
     # 该高度（或宽度 <84）就自动切到可滚动的简洁模式。
     MIN_WIDTH = 84
     MIN_HEIGHT = 30
+    # Tab / Shift+Tab 在三个区域间循环：端口列表/下拉 -> 参数 -> 底部按钮。
+    REGION_SELECTORS = (
+        "#ports, #port-sel",
+        "#conn-box Input, #conn-box CollapsibleTitle",
+        "#conn-buttons Button",
+    )
 
     def __init__(self) -> None:
         super().__init__()

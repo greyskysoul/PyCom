@@ -70,8 +70,10 @@ async def test_quit_confirm_can_be_cancelled():
         assert app._running is True
 
 
-async def test_tab_in_modal_steps_one_widget_at_a_time():
-    """Regression: Tab used to move focus by TWO widgets inside modals."""
+async def test_tab_cycles_focus_regions_in_options():
+    """Tab / Shift+Tab 在页签栏、选项区、按钮之间循环，而不是逐个字段向下。"""
+    from textual.widgets import Button, Tabs
+
     from pycom.screens.options import OptionsScreen
 
     app = PyComApp()
@@ -80,18 +82,73 @@ async def test_tab_in_modal_steps_one_widget_at_a_time():
         app.push_screen(OptionsScreen())
         await pilot.pause(0.2)
         scr = app.screen_stack[-1]
-        scr.query_one("#echo").focus()
+        scr.query_one("#echo").focus()  # 选项区
         await pilot.pause()
 
-        expected = ["echo", "wrap", "rx_cr", "rx_lf", "vt", "enter"]
+        # 选项区 -> 底部按钮
+        await pilot.press("tab")
+        await pilot.pause(0.02)
+        assert isinstance(app.focused, Button)
+        assert app.focused.id == "save"
 
-        visited = []
-        for _ in range(len(expected) + 1):
-            visited.append(app.focused.id)
-            await pilot.press("tab")
-            await pilot.pause(0.02)
-        # every checkbox must be reachable in strict order, no skips
-        assert visited[: len(expected)] == expected
+        # 按钮 -> 页签栏
+        await pilot.press("tab")
+        await pilot.pause(0.02)
+        assert isinstance(app.focused, Tabs)
+
+        # 页签栏 -> 选项区（该区域第一个字段）
+        await pilot.press("tab")
+        await pilot.pause(0.02)
+        assert app.focused.id == "echo"
+
+        # Shift+Tab 反向回到页签栏
+        await pilot.press("shift+tab")
+        await pilot.pause(0.02)
+        assert isinstance(app.focused, Tabs)
+
+
+async def test_tab_cycles_focus_regions_in_connection():
+    """端口页 Tab 在 端口列表/参数/按钮 三个区域间循环。"""
+    from pycom.screens.connection import ConnectionScreen
+
+    app = PyComApp()
+    async with app.run_test(size=(110, 36)) as pilot:
+        await pilot.pause()
+        app.push_screen(ConnectionScreen())
+        await pilot.pause(0.3)
+
+        assert app.focused.id == "ports"  # after_build 聚焦端口表
+        await pilot.press("tab")
+        await pilot.pause(0.02)
+        assert app.focused.id == "baud"
+
+        await pilot.press("tab")
+        await pilot.pause(0.02)
+        assert app.focused.id == "refresh"
+
+        await pilot.press("tab")
+        await pilot.pause(0.02)
+        assert app.focused.id == "ports"
+
+
+async def test_tab_cycles_focus_regions_in_connection_compact():
+    """简洁（小窗口）端口页同样的三区域 Tab 循环。"""
+    from pycom.screens.connection import ConnectionScreen
+
+    app = PyComApp()
+    async with app.run_test(size=(70, 22)) as pilot:
+        await pilot.pause()
+        app.push_screen(ConnectionScreen())
+        await pilot.pause(0.3)
+
+        assert app.focused.id == "port-sel"  # 简洁布局聚焦端口下拉
+        await pilot.press("tab")
+        await pilot.pause(0.02)
+        assert app.focused.id == "baud"
+
+        await pilot.press("tab")
+        await pilot.pause(0.02)
+        assert app.focused.id == "refresh"
 
 
 async def test_arrows_navigate_between_fields_in_modal():

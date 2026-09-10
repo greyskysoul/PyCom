@@ -174,6 +174,12 @@ class OptionsScreen(AdaptiveModal):
     # 就自动切到可滚动的简洁模式。
     MIN_WIDTH = 84
     MIN_HEIGHT = 27
+    # Tab / Shift+Tab 在三个区域间循环：页签栏 -> 当前页选项 -> 底部按钮。
+    REGION_SELECTORS = (
+        "#options-body ContentTabs",
+        "#options-body Checkbox, #options-body Input, #options-body Select",
+        "#options-buttons Button",
+    )
 
     def build_rich(self) -> Vertical:
         return _OptionsRich(id=self.ROOT_ID)

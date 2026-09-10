@@ -131,12 +131,61 @@ def _handle_arrow_key(screen: Screen, event: Key) -> bool:
 
 
 class ModalBase(Screen):
-    """Screen with a border/title that closes on ``escape`` (returns ``None``)."""
+    """Screen with a border/title that closes on ``escape`` (returns ``None``).
 
-    BINDINGS = [("escape", "close", "关闭")]
+    ``REGION_SELECTORS`` optionally defines coarse Tab focus regions: Tab /
+    Shift+Tab cycle between them (e.g. tab bar -> fields -> buttons) instead of
+    stepping down through every field.  Empty keeps Textual's default per-widget
+    Tab traversal.  Arrow keys still move between individual fields (see
+    :func:`_handle_arrow_key`).
+    """
+
+    BINDINGS = [
+        ("escape", "close", "关闭"),
+        Binding("tab", "focus_next_region", show=False, priority=True),
+        Binding("shift+tab", "focus_previous_region", show=False, priority=True),
+    ]
+
+    # 粗粒度 Tab 区域：每个元素是一个 CSS 选择器，按 Tab 的顺序排列。
+    REGION_SELECTORS: ClassVar[tuple[str, ...]] = ()
 
     def action_close(self) -> None:
         self.dismiss(None)
+
+    # -- coarse Tab focus regions -------------------------------------------
+    def _focus_groups(self) -> list[list[Widget]]:
+        groups: list[list[Widget]] = []
+        for selector in self.REGION_SELECTORS:
+            widgets = [
+                w
+                for w in self.query(selector)
+                if w.can_focus and not w.disabled and _is_effectively_displayed(w)
+            ]
+            if widgets:
+                groups.append(widgets)
+        return groups
+
+    def _move_region(self, step: int) -> None:
+        groups = self._focus_groups()
+        if not groups:
+            if step > 0:
+                self.focus_next()
+            else:
+                self.focus_previous()
+            return
+        focused = self.focused
+        current = next((i for i, group in enumerate(groups) if focused in group), None)
+        if current is None:
+            target = groups[0] if step > 0 else groups[-1]
+        else:
+            target = groups[(current + step) % len(groups)]
+        target[0].focus()
+
+    def action_focus_next_region(self) -> None:
+        self._move_region(1)
+
+    def action_focus_previous_region(self) -> None:
+        self._move_region(-1)
 
     def on_key(self, event: Key) -> None:
         if _handle_arrow_key(self, event):
