@@ -40,6 +40,7 @@ Built for embedded firmware flashing (STM32 &amp; other ymodem bootloaders) and 
 ## Features
 
 - **Full-screen terminal UI** — device ANSI/VT output is rendered correctly, with scrollable history.
+- **Light / dark themes** — One Half palette, switchable in Options; “Auto” follows the terminal background (OSC 11) or the system theme.
 - **Ctrl+A prefix-key + overlay menu** — familiar minicom interaction model.
 - **YMODEM send / receive** — CRC-16-CCITT, configurable 128/1024-byte blocks, timeout retransmission, progress display, cancellable.
 - **ZMODEM transfer** — lrzsz-compatible engine (pick it via `Ctrl+A` `S`/`R`).
@@ -161,7 +162,7 @@ creates a GitHub Release from the build artifacts.
 
 ## Tech stack
 
-- **Python ≥3.11**, `src` layout, stdlib-first
+- **Python ≥3.9**, `src` layout, stdlib-first
 - **Textual** — terminal TUI framework (modal overlays / forms / file tree, native overlay menu support)
 - **pyserial** — serial port (including `list_ports` enumeration)
 - **pyte** — VT terminal emulation for the device RX byte stream (subclassing its `Screen` to capture scrolled-out content for history; LGPLv3)

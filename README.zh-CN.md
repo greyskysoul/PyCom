@@ -40,6 +40,7 @@
 ## 特性
 
 - **全屏终端界面**：设备 ANSI/VT 输出正确渲染、可滚动回看。
+- **浅色/深色主题**：One Half 配色，可在选项页切换；“自动”模式跟随终端背景（OSC 11）或系统主题。
 - **Ctrl+A 前缀键 + 弹层菜单**（minicom 交互习惯）。
 - **YMODEM 发送 / 接收**：CRC-16-CCITT、128/1024 字节块可配置、超时重传、进度显示、可取消。
 - **ZMODEM 传输**：与 lrzsz 兼容的协议引擎（通过 `Ctrl+A` `S`/`R` 选择）。
@@ -157,7 +158,7 @@ CI（`.github/workflows/ci.yml`）在 Windows / Ubuntu 双平台跑 lint/类型/
 
 ## 技术栈
 
-- **Python ≥3.11**，`src` 布局，标准库优先
+- **Python ≥3.9**，`src` 布局，标准库优先
 - **Textual** — 终端 TUI 框架（模态弹层/表单/文件树，天然支持弹层菜单）
 - **pyserial** — 串口（含 `list_ports` 端口枚举）
 - **pyte** — 设备 RX 字节流的 VT 终端模拟（子类化其 `Screen` 捕获滚出内容实现回看；LGPLv3）
