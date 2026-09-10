@@ -62,6 +62,29 @@ def test_tr_unknown_key_falls_back_to_source():
     assert tr("不存在的中文字符串") == "不存在的中文字符串"
 
 
+def test_english_form_labels_fit_label_column():
+    """表单标签列固定 16 列；英文翻译不能更长，否则会换行撑高布局。"""
+    set_language("en")
+    labels = (
+        "传输超时(s)",
+        "保存目录",
+        "重试次数",
+        "数据块",
+        "解码字符集",
+        "回车发送",
+        "退格发送",
+        "波特率",
+        "数据位",
+        "校验",
+        "停止位",
+        "流控",
+        "文件",
+        "文件名",
+    )
+    for key in labels:
+        assert len(tr(key)) <= 16, key
+
+
 # --------------------------------------------------------------------------- persistence
 
 

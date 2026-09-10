@@ -302,11 +302,11 @@ _DARK_VARIABLES: dict[str, str] = {
     "term-fg": "#dcdfe4",
     "hex-bg": "#313640",
     "hex-input-bg": "#282c34",
-    "hex-input-focus-bg": "#3b82f6",
+    "hex-input-focus-bg": "#313640",
     "hex-input-fg": "#dcdfe4",
     "muted": "#5c6370",
     "control-bg": "#3a4048",
-    "control-focus-bg": "#3b82f6",
+    "control-focus-bg": "#474e5d",
     "control-fg": "#dcdfe4",
     "button-bg": "#3a4048",
     "hover-bg": "#4a5260",
@@ -314,8 +314,8 @@ _DARK_VARIABLES: dict[str, str] = {
     "label": "#919baa",
     "faint": "#5c6370",
     "border": "#474e5d",
-    "highlight-bg": "#3b82f6",
-    "highlight-fg": "#ffffff",
+    "highlight-bg": "#474e5d",
+    "highlight-fg": "#dcdfe4",
     "error": "#e06c75",
     "accent": "#61afef",
     "checkbox-fg": "#dcdfe4",
@@ -336,11 +336,11 @@ _LIGHT_VARIABLES: dict[str, str] = {
     "term-fg": "#383a42",
     "hex-bg": "#f0f0f0",
     "hex-input-bg": "#ffffff",
-    "hex-input-focus-bg": "#4a90d9",
+    "hex-input-focus-bg": "#f0f0f0",
     "hex-input-fg": "#383a42",
     "muted": "#a0a1a7",
     "control-bg": "#ffffff",
-    "control-focus-bg": "#4a90d9",
+    "control-focus-bg": "#f0f0f0",
     "control-fg": "#383a42",
     "button-bg": "#ffffff",
     "hover-bg": "#f0f0f0",
@@ -348,8 +348,8 @@ _LIGHT_VARIABLES: dict[str, str] = {
     "label": "#a0a1a7",
     "faint": "#a0a1a7",
     "border": "#d4d4d4",
-    "highlight-bg": "#4a90d9",
-    "highlight-fg": "#ffffff",
+    "highlight-bg": "#e0e0e0",
+    "highlight-fg": "#383a42",
     "error": "#e45649",
     "accent": "#0184bc",
     "checkbox-fg": "#383a42",
@@ -363,6 +363,46 @@ _LIGHT_VARIABLES: dict[str, str] = {
     "primary-btn-hover-bg": "#5ba0e0",
     "table-header-bg": "#e8e8e8",
     "table-header-fg": "#383a42",
+}
+
+# Compat theme for bare Linux consoles (8/16 colours).  Uses only *base* ANSI
+# colours (0-7), never the bright variants (8-15): the Linux console only
+# implements the base 8 background colours, so a bright-black field fill would
+# emit SGR 100 and be silently ignored (i.e. fields look background-less).
+_COMPAT_VARIABLES: dict[str, str] = {
+    "ansi-background": "ansi_black",
+    "ansi-foreground": "ansi_white",
+    "term-bg": "ansi_black",
+    "term-fg": "ansi_default",
+    "hex-bg": "ansi_black",
+    "hex-input-bg": "ansi_black",
+    "hex-input-focus-bg": "ansi_black",
+    "hex-input-fg": "ansi_default",
+    "muted": "ansi_white",
+    "control-bg": "ansi_blue",
+    "control-focus-bg": "ansi_cyan",
+    "control-fg": "ansi_white",
+    "button-bg": "ansi_blue",
+    "hover-bg": "ansi_cyan",
+    "placeholder": "ansi_white",
+    "label": "ansi_white",
+    "faint": "ansi_cyan",
+    "border": "ansi_cyan",
+    "highlight-bg": "ansi_cyan",
+    "highlight-fg": "ansi_black",
+    "error": "ansi_red",
+    "accent": "ansi_cyan",
+    "checkbox-fg": "ansi_white",
+    "toggle-off": "ansi_white",
+    "compact-bg": "ansi_black",
+    "menu-btn-bg": "ansi_blue",
+    "menu-btn-fg": "ansi_white",
+    "menu-btn-hover-bg": "ansi_cyan",
+    "primary-btn-bg": "ansi_blue",
+    "primary-btn-fg": "ansi_white",
+    "primary-btn-hover-bg": "ansi_cyan",
+    "table-header-bg": "ansi_blue",
+    "table-header-fg": "ansi_white",
 }
 
 
@@ -398,6 +438,24 @@ def _build_themes() -> dict[str, Theme]:
             panel="#e8e8e8",
             dark=False,
             variables=dict(_LIGHT_VARIABLES),
+        ),
+        # 仅用于兼容模式（Linux 控制台/16 色）：基于 ANSI 命名色，避免真彩 hex
+        # 降级后互相撞色；不参与普通主题切换。
+        "pycom-compat": Theme(
+            name="pycom-compat",
+            primary="ansi_cyan",
+            secondary="ansi_blue",
+            accent="ansi_cyan",
+            warning="ansi_yellow",
+            error="ansi_red",
+            success="ansi_green",
+            foreground="ansi_white",
+            background="ansi_black",
+            surface="ansi_black",
+            panel="ansi_black",
+            dark=True,
+            ansi=True,
+            variables=dict(_COMPAT_VARIABLES),
         ),
     }
 
@@ -649,10 +707,12 @@ class PyComApp(App):
         enable_debug: bool = False,
         detected_dark: bool | None = None,
         language: str | None = None,
+        compat: bool = False,
     ) -> None:
         super().__init__()
         self.cfg = cfg or AppConfig()
-        # register the two colour themes and apply the configured one
+        self.compat = compat
+        # register the colour themes and apply the configured one
         for _name, _theme in _build_themes().items():
             self.register_theme(_theme)
         self._detected_dark = detected_dark
@@ -1442,6 +1502,8 @@ class PyComApp(App):
 
     def _resolve_theme(self, detected_dark: bool | None) -> str:
         """Map the configured theme mode to a registered theme name."""
+        if self.compat:
+            return "pycom-compat"  # 16 色终端专用，忽略普通主题设置
         mode = self.cfg.theme
         if mode == "light":
             return "pycom-light"
@@ -1951,6 +2013,7 @@ def main(argv=None) -> int:
         enable_debug=args.enable_debug,
         detected_dark=detected_dark,
         language=lang_override,
+        compat=compat,
     )
     result = app.run(mouse=not (args.no_mouse or compat))
     if result == _EXIT_TOO_SMALL:  # 运行中窗口被缩到过小

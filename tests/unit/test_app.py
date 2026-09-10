@@ -107,6 +107,44 @@ async def test_tab_cycles_focus_regions_in_options():
         assert isinstance(app.focused, Tabs)
 
 
+async def test_arrows_from_tab_bar_jump_between_regions():
+    """页签栏聚焦时：下键进选项区，上键进按钮区；反向（选项上、按钮下）也回到页签栏。"""
+    from textual.widgets import Tabs
+
+    from pycom.screens.options import OptionsScreen
+
+    app = PyComApp()
+    async with app.run_test(size=(100, 32)) as pilot:
+        await pilot.pause()
+        app.push_screen(OptionsScreen())
+        await pilot.pause(0.3)
+        scr = app.screen_stack[-1]
+        tabs = scr.query_one("#options-body Tabs", Tabs)
+
+        tabs.focus()
+        await pilot.pause()
+        await pilot.press("down")
+        await pilot.pause(0.02)
+        assert app.focused.id == "echo"  # 选项区第一个字段
+
+        # 反向：选项区顶部再按上，回到页签栏
+        await pilot.press("up")
+        await pilot.pause(0.02)
+        assert isinstance(app.focused, Tabs)
+
+        # 页签栏按上 -> 按钮区
+        await pilot.press("up")
+        await pilot.pause(0.02)
+        assert app.focused.id == "save"
+
+        # 反向：按钮区最后一个往下，回到页签栏
+        scr.query_one("#cancel").focus()
+        await pilot.pause()
+        await pilot.press("down")
+        await pilot.pause(0.02)
+        assert isinstance(app.focused, Tabs)
+
+
 async def test_tab_cycles_focus_regions_in_connection():
     """端口页 Tab 在 端口列表/参数/按钮 三个区域间循环。"""
     from pycom.screens.connection import ConnectionScreen
@@ -1491,6 +1529,84 @@ def test_cli_lang_and_compat_flags_parse():
 
     args = _parse_args(["--no-compat"])
     assert args.no_compat is True
+
+
+def test_compat_uses_dedicated_theme():
+    from pycom.config import AppConfig
+
+    assert PyComApp(cfg=AppConfig(theme="dark")).theme == "pycom-dark"
+    assert PyComApp(cfg=AppConfig(theme="light")).theme == "pycom-light"
+    assert PyComApp(cfg=AppConfig(theme="dark"), compat=True).theme == "pycom-compat"
+    assert PyComApp(cfg=AppConfig(theme="light"), compat=True).theme == "pycom-compat"
+
+
+async def test_compat_theme_fills_unfocused_inputs_with_ansi_colour():
+    """兼容主题下未聚焦输入框用基础 ANSI 蓝填充（亮色背景在 Linux 控制台无效）。"""
+    from pycom.config import AppConfig
+    from pycom.screens.options import OptionsScreen
+
+    app = PyComApp(cfg=AppConfig(language="zh"), compat=True)
+    async with app.run_test(size=(100, 32)) as pilot:
+        await pilot.pause()
+        app.push_screen(OptionsScreen())
+        await pilot.pause(0.3)
+        field = app.screen_stack[-1].query_one("#timeout")
+        bg = field.styles.background
+        assert bg.ansi == 4  # ansi blue (base colour, not bright)
+
+
+async def test_compat_compact_button_keeps_size_when_pressed():
+    """兼容模式下按下按钮时，Textual 的 ansi 默认样式会加 blank 边框使按钮变大；
+    应用 CSS 需强制紧凑按钮始终无边框。"""
+    from pycom.config import AppConfig
+    from pycom.screens.options import OptionsScreen
+
+    app = PyComApp(cfg=AppConfig(language="en"), compat=True)
+    async with app.run_test(size=(100, 32)) as pilot:
+        await pilot.pause()
+        app.push_screen(OptionsScreen())
+        await pilot.pause(0.3)
+        btn = app.screen_stack[-1].query_one("#save")
+        assert btn.outer_size.height == 1
+        btn.add_class("-active")
+        await pilot.pause(0.1)
+        assert btn.outer_size.height == 1
+
+
+async def test_compat_hex_input_focus_keeps_colour():
+    """兼容模式下 HEX 输入框聚焦时不改变底色。"""
+    from pycom.config import AppConfig
+
+    app = PyComApp(cfg=AppConfig(language="zh"), compat=True)
+    async with app.run_test(size=(100, 28)) as pilot:
+        await pilot.pause()
+        app.cfg.hex_mode = True
+        app.apply_config()
+        await pilot.pause(0.3)
+        field = app.query_one("#hex-input")
+        before = field.styles.background
+        field.focus()
+        await pilot.pause(0.1)
+        assert field.styles.background == before
+
+
+async def test_compat_picker_path_focus_changes_colour():
+    """兼容模式下文件选择器路径栏聚焦时会变色。"""
+    import os
+
+    from pycom.config import AppConfig
+    from pycom.screens.filepicker import PathPicker
+
+    app = PyComApp(cfg=AppConfig(language="zh"), compat=True)
+    async with app.run_test(size=(110, 34)) as pilot:
+        await pilot.pause()
+        app.push_screen(PathPicker(os.getcwd(), pick_files=True))
+        await pilot.pause(0.3)
+        field = app.screen_stack[-1].query_one("#picker-path")
+        before = field.styles.background
+        field.focus()
+        await pilot.pause(0.1)
+        assert field.styles.background != before
 
 
 def test_compat_marker_switches_to_ascii():

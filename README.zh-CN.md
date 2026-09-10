@@ -102,7 +102,8 @@ pycom --bare -p COM3 -b 115200
 >
 > **极端环境（Linux `init3` / 裸虚拟控制台）**：Linux 虚拟控制台（`TERM=linux`）只支持
 > 8/16 色、字体没有中文字形、也没有鼠标上报，富界面会显示乱码。程序检测到后会自动
-> 进入**兼容模式**：英文界面、16 色（`standard`）渲染、关动画、关鼠标。可用 `--compat`
+> 进入**兼容模式**：英文界面、专属高对比 ANSI 主题（只用基础 8 色——Linux 控制台
+> 不支持亮色背景，否则控件会没有底色）、关动画、关鼠标。可用 `--compat`
 > 手动强制，或用 `--no-compat` 关闭自动检测。`--lang en`（或环境变量 `PYCOM_LANG=en`）
 > 可只对本次运行强制语言，不改动已保存的偏好。也可自行用 Textual 的环境变量降级：
 > `TEXTUAL_COLOR_SYSTEM=standard`、`TEXTUAL_ANIMATIONS=none`、`NO_COLOR=1`（后者会连

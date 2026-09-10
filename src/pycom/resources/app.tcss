@@ -94,6 +94,15 @@ Button.-primary:hover {
     color: $primary-btn-fg;
 }
 
+/* 兼容（ANSI）模式下 Textual 默认主题会在按下时给 -active 按钮加一圈 blank 边框
+   （blank 虽不可见但占位），紧凑按钮会瞬间从 1 行“变大”到 3 行。这里强制无边框。 */
+Button:ansi.-style-default.-textual-compact,
+Button:ansi.-style-default.-textual-compact:hover,
+Button:ansi.-style-default.-textual-compact:focus,
+Button:ansi.-style-default.-textual-compact.-active {
+    border: none !important;
+}
+
 /* --- 16 进制接收/发送输入条（仅在 HEX 模式开启时挂载） ----------------------- */
 #hex-bar {
     height: auto;
@@ -114,7 +123,6 @@ Button.-primary:hover {
 
 #hex-bar TextArea:focus {
     background: $hex-input-focus-bg;
-    color: $highlight-fg;
 }
 
 #hex-bar Button {
@@ -190,7 +198,6 @@ DataTable > .datatable--header {
 
 #conn-box .form-row Input:focus {
     background: $control-focus-bg;
-    color: $highlight-fg;
     border: none;
 }
 
@@ -413,7 +420,6 @@ MainMenuScreen {
 
 #options-body Input:focus {
     background: $control-focus-bg;
-    color: $highlight-fg;
     border: none;
 }
 
@@ -432,16 +438,6 @@ MainMenuScreen {
 #options-body Select:focus > SelectCurrent,
 #options-body SelectCurrent:focus {
     background: $control-focus-bg;
-}
-
-#options-body Select:focus > SelectCurrent > Static#label,
-#options-body SelectCurrent:focus > Static#label {
-    color: $highlight-fg;
-}
-
-#options-body Select:focus > SelectCurrent .arrow,
-#options-body SelectCurrent:focus .arrow {
-    color: $highlight-fg;
 }
 
 #options-body SelectCurrent > Static#label {
@@ -489,7 +485,6 @@ MainMenuScreen {
 
 #xfer-box .form-row Input:focus {
     background: $control-focus-bg;
-    color: $highlight-fg;
     border: none;
 }
 
@@ -537,7 +532,6 @@ MainMenuScreen {
 
 #picker-path:focus {
     background: $control-focus-bg;
-    color: $highlight-fg;
     border: none;
 }
 
@@ -620,7 +614,6 @@ Vertical#conn-box.compact #conn-body {
 
 #conn-box.compact .c-row Input:focus {
     background: $control-focus-bg;
-    color: $highlight-fg;
     border: none;
 }
 
@@ -638,16 +631,6 @@ Vertical#conn-box.compact #conn-body {
 #conn-box.compact .c-row Select:focus > SelectCurrent,
 #conn-box.compact SelectCurrent:focus {
     background: $control-focus-bg;
-}
-
-#conn-box.compact .c-row Select:focus > SelectCurrent > Static#label,
-#conn-box.compact SelectCurrent:focus > Static#label {
-    color: $highlight-fg;
-}
-
-#conn-box.compact .c-row Select:focus > SelectCurrent .arrow,
-#conn-box.compact SelectCurrent:focus .arrow {
-    color: $highlight-fg;
 }
 
 #conn-box.compact SelectCurrent > Static#label {

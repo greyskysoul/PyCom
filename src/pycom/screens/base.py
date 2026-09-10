@@ -22,6 +22,7 @@ from textual.widgets import (
     Label,
     Select,
     Static,
+    Tabs,
 )
 from textual.widgets._collapsible import CollapsibleTitle
 from textual.widgets._select import NonSelectableStatic, SelectCurrent, SelectOverlay
@@ -77,11 +78,15 @@ def _is_effectively_displayed(widget: Widget) -> bool:
 
 
 def _arrow_targets(screen: Screen) -> list[Widget]:
-    """Focusable fields of a dialog, sorted by position (row-major)."""
+    """Focusable fields of a dialog, sorted by position (row-major).
+
+    Includes the tab bar (``Tabs``) so up/down can move into/out of it as part
+    of the vertical cycle.
+    """
     targets: list[Widget] = [
         w
         for w in screen.walk_children()
-        if isinstance(w, (Button, Checkbox, Input, Select, CollapsibleTitle))
+        if isinstance(w, (Button, Checkbox, Input, Select, CollapsibleTitle, Tabs))
         and _is_effectively_displayed(w)
         and not w.disabled
         and w.can_focus
@@ -104,6 +109,14 @@ def _handle_arrow_key(screen: Screen, event: Key) -> bool:
     focused = screen.focused
     if isinstance(focused, (DataTable, DirectoryTree)):
         return False  # these widgets manage their own cursor
+    if isinstance(focused, Tabs):
+        # 页签栏：上/下 在焦点区域之间跳（下 -> 选项区，上 -> 按钮区，区域循环）；
+        # 左/右 留给 ContentTabs 自身“切换标签”的绑定。
+        move = getattr(screen, "_move_region", None)
+        if event.key in ("up", "down") and move is not None:
+            move(1 if event.key == "down" else -1)
+            return True
+        return False
     if isinstance(focused, Input) and event.key in ("left", "right"):
         return False  # left/right keep editing the text caret
     targets = _arrow_targets(screen)

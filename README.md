@@ -104,8 +104,10 @@ pycom --bare -p COM3 -b 115200
 > **Extreme environments (Linux `init3` / bare virtual console).** A Linux virtual
 > console (`TERM=linux`) only supports 8/16 colors, its font has no CJK glyphs, and it
 > has no mouse reporting — the rich UI then renders garbled. PyCom detects this and
-> automatically enables **compatibility mode**: English UI, 16-color (`standard`)
-> rendering, animations off and mouse capture off. Force it manually with `--compat`,
+> automatically enables **compatibility mode**: English UI, a dedicated high-contrast
+> ANSI theme using only the base 8 colours (the Linux console ignores bright
+> backgrounds, which would otherwise leave fields background-less), animations
+> off and mouse capture off. Force it manually with `--compat`,
 > or opt out of the automatic detection with `--no-compat`. `--lang en` (or the
 > `PYCOM_LANG=en` environment variable) forces the language for a single run without
 > touching the saved preference. You can also simplify rendering yourself via Textual's
