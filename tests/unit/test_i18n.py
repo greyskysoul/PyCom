@@ -80,6 +80,28 @@ def test_app_init_auto_detects_when_language_unset():
     assert get_language() in ("zh", "en")
 
 
+def test_app_init_language_arg_overrides_saved_config():
+    """--lang / 兼容模式传入的语言只影响本次运行，不写回配置。"""
+    from pycom.app import PyComApp
+
+    set_language("zh")
+    cfg = AppConfig(language="zh")
+    PyComApp(cfg=cfg, language="en")
+    assert get_language() == "en"
+    assert cfg.language == "zh"
+
+
+def test_pycom_lang_env_overrides_saved_config(monkeypatch):
+    from pycom.app import PyComApp
+
+    monkeypatch.setenv("PYCOM_LANG", "en")
+    set_language("zh")
+    cfg = AppConfig(language="zh")
+    PyComApp(cfg=cfg)
+    assert get_language() == "en"
+    assert cfg.language == "zh"
+
+
 # --------------------------------------------------------------------------- runtime switch
 
 

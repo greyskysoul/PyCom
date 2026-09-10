@@ -25,6 +25,7 @@ from textual.theme import Theme
 from textual.widgets import Button, TextArea
 
 from pycom import APP_NAME, __version__
+from pycom.compat import set_ascii_ui
 from pycom.config import AppConfig, ConnectionSettings, load_config, save_config
 from pycom.i18n import detect_system_language, get_language, set_language, tr
 from pycom.keys import (
@@ -63,6 +64,55 @@ MIN_TERMINAL_COLS = 20
 MIN_TERMINAL_ROWS = 5
 # app.run() 因窗口过小退出时的返回值，供 main() 识别并打印提示。
 _EXIT_TOO_SMALL = "too-small"
+
+# --- 极端环境（Linux 虚拟控制台 / runlevel 3）兼容模式 --------------------------
+# 这种环境下：控制台字体没有中文字形、只支持 8/16 色、也没有鼠标上报，不做降级
+# 界面会出现中文乱码 / 真彩色花屏。兼容模式强制英文、16 色、关动画、关鼠标；
+# 检测到 TERM=linux（或显式 --compat）时自动启用，可用 --no-compat 关闭。
+_COMPAT_LANG = "en"
+
+
+def _is_linux_console() -> bool:
+    """True when running on a Linux virtual console (init3 / runlevel 3)."""
+    if not sys.platform.startswith("linux"):
+        return False
+    return os.environ.get("TERM", "") == "linux"
+
+
+def _prescan_lang(argv: list[str]) -> str | None:
+    """Best-effort pre-scan of ``--lang`` so ``--help`` is localized too."""
+    for i, arg in enumerate(argv):
+        if arg == "--lang" and i + 1 < len(argv):
+            return argv[i + 1]
+        if arg.startswith("--lang="):
+            return arg.split("=", 1)[1]
+    return None
+
+
+def _compat_requested(argv: list[str]) -> bool:
+    """Compatibility mode: explicit ``--compat``/``--no-compat`` beats the
+    automatic Linux-console detection."""
+    if "--no-compat" in argv:
+        return False
+    if "--compat" in argv:
+        return True
+    return _is_linux_console()
+
+
+def _apply_compat_palette() -> None:
+    """Downgrade Textual's rendering for a bare Linux console.
+
+    Textual reads ``TEXTUAL_COLOR_SYSTEM``/``TEXTUAL_ANIMATIONS`` once at import
+    time, so patching the environment here is too late — override the captured
+    ``textual.constants`` values instead.  A user-provided environment variable
+    still wins.
+    """
+    import textual.constants as _tc
+
+    if "TEXTUAL_COLOR_SYSTEM" not in os.environ:
+        _tc.COLOR_SYSTEM = "standard"  # type: ignore[misc]
+    if "TEXTUAL_ANIMATIONS" not in os.environ:
+        _tc.TEXTUAL_ANIMATIONS = "none"  # type: ignore[misc]
 
 
 def _too_small_message(cols: int, rows: int) -> str:
@@ -252,11 +302,11 @@ _DARK_VARIABLES: dict[str, str] = {
     "term-fg": "#dcdfe4",
     "hex-bg": "#313640",
     "hex-input-bg": "#282c34",
-    "hex-input-focus-bg": "#313640",
+    "hex-input-focus-bg": "#3b82f6",
     "hex-input-fg": "#dcdfe4",
     "muted": "#5c6370",
     "control-bg": "#3a4048",
-    "control-focus-bg": "#474e5d",
+    "control-focus-bg": "#3b82f6",
     "control-fg": "#dcdfe4",
     "button-bg": "#3a4048",
     "hover-bg": "#4a5260",
@@ -264,8 +314,8 @@ _DARK_VARIABLES: dict[str, str] = {
     "label": "#919baa",
     "faint": "#5c6370",
     "border": "#474e5d",
-    "highlight-bg": "#474e5d",
-    "highlight-fg": "#dcdfe4",
+    "highlight-bg": "#3b82f6",
+    "highlight-fg": "#ffffff",
     "error": "#e06c75",
     "accent": "#61afef",
     "checkbox-fg": "#dcdfe4",
@@ -286,11 +336,11 @@ _LIGHT_VARIABLES: dict[str, str] = {
     "term-fg": "#383a42",
     "hex-bg": "#f0f0f0",
     "hex-input-bg": "#ffffff",
-    "hex-input-focus-bg": "#f0f0f0",
+    "hex-input-focus-bg": "#4a90d9",
     "hex-input-fg": "#383a42",
     "muted": "#a0a1a7",
     "control-bg": "#ffffff",
-    "control-focus-bg": "#f0f0f0",
+    "control-focus-bg": "#4a90d9",
     "control-fg": "#383a42",
     "button-bg": "#ffffff",
     "hover-bg": "#f0f0f0",
@@ -298,8 +348,8 @@ _LIGHT_VARIABLES: dict[str, str] = {
     "label": "#a0a1a7",
     "faint": "#a0a1a7",
     "border": "#d4d4d4",
-    "highlight-bg": "#e0e0e0",
-    "highlight-fg": "#383a42",
+    "highlight-bg": "#4a90d9",
+    "highlight-fg": "#ffffff",
     "error": "#e45649",
     "accent": "#0184bc",
     "checkbox-fg": "#383a42",
@@ -598,6 +648,7 @@ class PyComApp(App):
         startup_script: str | None = None,
         enable_debug: bool = False,
         detected_dark: bool | None = None,
+        language: str | None = None,
     ) -> None:
         super().__init__()
         self.cfg = cfg or AppConfig()
@@ -606,8 +657,17 @@ class PyComApp(App):
             self.register_theme(_theme)
         self._detected_dark = detected_dark
         self.theme = self._resolve_theme(detected_dark)
-        # 解析界面语言：优先已保存的选择，否则自动侦测系统语言（失败退回英文）
-        if self.cfg.language not in ("zh", "en"):
+        # 解析界面语言：本次运行的显式覆盖（--lang / PYCOM_LANG / 兼容模式）优先，
+        # 其次已保存的选择，最后自动侦测系统语言（失败退回英文）。覆盖只影响本次
+        # 运行，不写入配置。
+        override = language if language in ("zh", "en") else None
+        if override is None:
+            env_lang = os.environ.get("PYCOM_LANG")
+            if env_lang in ("zh", "en"):
+                override = env_lang
+        if override is not None:
+            set_language(override)
+        elif self.cfg.language not in ("zh", "en"):
             self.cfg.language = set_language(detect_system_language())
         else:
             set_language(self.cfg.language)
@@ -1706,6 +1766,22 @@ def _parse_args(argv):
         action="store_true",
         help=tr("禁用鼠标捕获：终端不再上报鼠标，滚轮/点击由宿主终端自身处理"),
     )
+    ui.add_argument(
+        "--lang",
+        choices=("zh", "en"),
+        default=None,
+        help=tr("强制界面语言：zh=中文 / en=英文（默认自动侦测系统语言）"),
+    )
+    ui.add_argument(
+        "--compat",
+        action="store_true",
+        help=tr("兼容模式：强制英文、16 色、无动画、无鼠标（Linux 控制台/init3 下自动启用）"),
+    )
+    ui.add_argument(
+        "--no-compat",
+        action="store_true",
+        help=tr("禁用兼容模式的自动检测"),
+    )
 
     bridge = parser.add_argument_group(tr("直通模式（--bare，无界面）"))
     bridge.add_argument(
@@ -1762,7 +1838,7 @@ def _binary_stdio() -> None:
             msvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)  # type: ignore[attr-defined]
 
 
-def run_bare(args) -> int:
+def run_bare(args, language: str | None = None) -> int:
     """--bare entry point: a transparent, UI-less serial bridge.
 
     Every byte read from stdin is written to the port and every byte received
@@ -1771,7 +1847,9 @@ def run_bare(args) -> int:
     pipes and talk straight to the device.
     """
     cfg = load_config()
-    if cfg.language in ("zh", "en"):
+    if language in ("zh", "en"):
+        set_language(language)
+    elif cfg.language in ("zh", "en"):
         set_language(cfg.language)
     conn = _make_conn(cfg, args)
     assert conn is not None, "--bare requires -p/--port (enforced by argparse)"
@@ -1827,11 +1905,26 @@ def run_bare(args) -> int:
 
 
 def main(argv=None) -> int:
-    # CLI 帮助文本按侦测到的系统语言显示（失败退回英文）
-    set_language(detect_system_language())
-    args = _parse_args(argv if argv is not None else sys.argv[1:])
+    argv_list = list(sys.argv[1:] if argv is None else argv)
+    # 语言覆盖优先级：--lang > PYCOM_LANG > 兼容模式(强制英文) > 系统侦测。
+    # 先于 _parse_args 确定，--help 也按该语言显示。
+    lang_override = _prescan_lang(argv_list) or os.environ.get("PYCOM_LANG")
+    if lang_override not in ("zh", "en"):
+        lang_override = None
+    compat = _compat_requested(argv_list)
+    set_ascii_ui(compat)
+    if compat and lang_override is None:
+        lang_override = _COMPAT_LANG
+    set_language(lang_override or detect_system_language())
+
+    args = _parse_args(argv_list)
+    if args.lang in ("zh", "en"):  # argparse 前缀匹配也可能命中 --lang
+        lang_override = args.lang
+        set_language(lang_override)
+    if compat:
+        _apply_compat_palette()
     if args.bare:
-        return run_bare(args)
+        return run_bare(args, lang_override)
 
     cfg = load_config()
     if args.hex:
@@ -1845,8 +1938,9 @@ def main(argv=None) -> int:
         sys.stderr.write(_too_small_message(cols, rows))
         return 1
 
-    # auto theme: query the terminal background (fall back to dark)
-    detected_dark = detect_terminal_dark() if cfg.theme == "auto" else None
+    # auto theme: query the terminal background (fall back to dark).
+    # 兼容模式下终端不响应 OSC 11，跳过查询以免把转义序列打到控制台上。
+    detected_dark = detect_terminal_dark() if (cfg.theme == "auto" and not compat) else None
 
     app = PyComApp(
         cfg=cfg,
@@ -1856,8 +1950,9 @@ def main(argv=None) -> int:
         startup_script=args.script,
         enable_debug=args.enable_debug,
         detected_dark=detected_dark,
+        language=lang_override,
     )
-    result = app.run(mouse=not args.no_mouse)
+    result = app.run(mouse=not (args.no_mouse or compat))
     if result == _EXIT_TOO_SMALL:  # 运行中窗口被缩到过小
         w, h = app._too_small_size
         sys.stderr.write(_too_small_message(w, h))

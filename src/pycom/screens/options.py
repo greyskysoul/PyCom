@@ -10,19 +10,23 @@ from textual.content import Content
 from textual.widget import Widget
 from textual.widgets import Button, Checkbox, Input, Label, Static, TabbedContent, TabPane
 
+from pycom.compat import marker
 from pycom.config import save_config
 from pycom.i18n import tr
 from pycom.screens.base import AdaptiveModal, FieldSelect
 
 
 class _CircleCheckbox(Checkbox):
-    """Checkbox whose marker is a hollow circle (off) / solid circle (on)."""
+    """Checkbox whose marker is a hollow circle (off) / solid circle (on).
+
+    On a bare Linux console the circle glyphs may be missing from the font, so
+    compatibility mode swaps them for ASCII ``[ ]`` / ``[x]`` (see pycom.compat).
+    """
 
     @property
     def _button(self) -> Content:
         style = self.get_visual_style("toggle--button")
-        glyph = "\u25cf" if self.value else "\u25cb"  # ● / ○
-        return Content.assemble((glyph, style))
+        return Content.assemble((marker(self.value), style))
 
 
 # 下拉可选项 (显示文本, 存储值)，顺序即下拉菜单中的展示顺序。

@@ -84,6 +84,11 @@ pycom -p COM3 -s "AT\r" -e 5
 pycom -p COM3 --hex
 # disable mouse capture (wheel/click is left to the host terminal)
 pycom -p COM3 --no-mouse
+# compatibility mode for a bare Linux virtual console (init3) / extreme terminals:
+# force English, 16 colors, no animations, no mouse
+pycom -p /dev/ttyUSB0 --compat
+# force the UI language for this run (zh | en); PYCOM_LANG=... also works
+pycom --lang en
 # headless pure serial pass-through (--bare): hides all UI, requires a port.
 # stdin bytes → serial, serial RX → stdout; hand the terminal to an AI agent, etc.:
 pycom --bare -p COM3 -b 115200
@@ -95,6 +100,19 @@ pycom --bare -p COM3 -b 115200
 >
 > `--bare` is a UI-less pure pass-through mode: it only uses the connection parameters
 > (`-p/-b/--parity/...`) and cannot be combined with `-s/-f/-e/--hex`.
+>
+> **Extreme environments (Linux `init3` / bare virtual console).** A Linux virtual
+> console (`TERM=linux`) only supports 8/16 colors, its font has no CJK glyphs, and it
+> has no mouse reporting — the rich UI then renders garbled. PyCom detects this and
+> automatically enables **compatibility mode**: English UI, 16-color (`standard`)
+> rendering, animations off and mouse capture off. Force it manually with `--compat`,
+> or opt out of the automatic detection with `--no-compat`. `--lang en` (or the
+> `PYCOM_LANG=en` environment variable) forces the language for a single run without
+> touching the saved preference. You can also simplify rendering yourself via Textual's
+> environment variables: `TEXTUAL_COLOR_SYSTEM=standard`, `TEXTUAL_ANIMATIONS=none`
+> and/or `NO_COLOR=1` (the latter also strips the device's ANSI colors). In compatibility
+> mode the checkbox/radio markers fall back to ASCII `[ ]`/`[x]` and the dropdown/collapsible
+> arrows to `v`/`^`/`>`, since console fonts often lack the glyphs (`○`/`●`/`▼`/`▲`/`▶`).
 
 ## Key bindings (Ctrl+A prefix)
 

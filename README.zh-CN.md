@@ -84,6 +84,11 @@ pycom -p COM3 -s "AT\r" -e 5
 pycom -p COM3 --hex
 # 关闭鼠标捕获（滚轮/点击交给宿主终端自身处理）
 pycom -p COM3 --no-mouse
+# 兼容模式：适配 Linux 虚拟控制台（init3）等极端环境
+# 强制英文、16 色、关动画、关鼠标
+pycom -p /dev/ttyUSB0 --compat
+# 本次运行强制界面语言（zh | en），也可用环境变量 PYCOM_LANG=...
+pycom --lang en
 # 无界面纯串口直通（--bare）：隐藏全部界面，必须指定端口。
 # stdin 字节→串口发送，串口 RX 原样打到 stdout，适合把终端交给 AI agent 等进程：
 pycom --bare -p COM3 -b 115200
@@ -94,6 +99,15 @@ pycom --bare -p COM3 -b 115200
 >
 > `--bare` 为隐藏全部界面的纯直通模式：只使用连接参数（`-p/-b/--parity/...`），
 > 不能与 `-s/-f/-e/--hex` 等交互启动选项混用。
+>
+> **极端环境（Linux `init3` / 裸虚拟控制台）**：Linux 虚拟控制台（`TERM=linux`）只支持
+> 8/16 色、字体没有中文字形、也没有鼠标上报，富界面会显示乱码。程序检测到后会自动
+> 进入**兼容模式**：英文界面、16 色（`standard`）渲染、关动画、关鼠标。可用 `--compat`
+> 手动强制，或用 `--no-compat` 关闭自动检测。`--lang en`（或环境变量 `PYCOM_LANG=en`）
+> 可只对本次运行强制语言，不改动已保存的偏好。也可自行用 Textual 的环境变量降级：
+> `TEXTUAL_COLOR_SYSTEM=standard`、`TEXTUAL_ANIMATIONS=none`、`NO_COLOR=1`（后者会连
+> 设备的 ANSI 颜色一并去掉）。兼容模式下复选框/单选项标记会退化为 ASCII `[ ]`/`[x]`，
+> 下拉框/折叠标题箭头退化为 `v`/`^`/`>`，因为控制台字体通常缺少 `○`/`●`/`▼`/`▲`/`▶` 字形。
 
 ## 快捷键（Ctrl+A 前缀）
 

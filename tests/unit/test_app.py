@@ -1359,6 +1359,171 @@ def test_cli_send_and_script_require_port():
     assert args.script == "boot.txt"
 
 
+# --------------------------------------------------------------------------- compat / lang
+
+
+def test_prescan_lang_reads_both_forms():
+    from pycom.app import _prescan_lang
+
+    assert _prescan_lang(["--lang", "en"]) == "en"
+    assert _prescan_lang(["--lang=zh"]) == "zh"
+    assert _prescan_lang(["-p", "COM3"]) is None
+
+
+def test_compat_flags_override_detection(monkeypatch):
+    from pycom.app import _compat_requested
+
+    monkeypatch.setattr("pycom.app._is_linux_console", lambda: False)
+    assert _compat_requested([]) is False
+    assert _compat_requested(["--compat"]) is True
+    assert _compat_requested(["--no-compat"]) is False
+
+
+def test_compat_auto_detected_on_linux_console(monkeypatch):
+    import pycom.app as app_mod
+
+    monkeypatch.setattr(app_mod.sys, "platform", "linux")
+    monkeypatch.setenv("TERM", "linux")
+    assert app_mod._is_linux_console() is True
+    assert app_mod._compat_requested([]) is True
+    assert app_mod._compat_requested(["--no-compat"]) is False
+
+    monkeypatch.setenv("TERM", "xterm-256color")
+    assert app_mod._is_linux_console() is False
+
+
+def test_apply_compat_palette_downgrades_rendering(monkeypatch):
+    import textual.constants as tc
+
+    import pycom.app as app_mod
+
+    monkeypatch.delenv("TEXTUAL_COLOR_SYSTEM", raising=False)
+    monkeypatch.delenv("TEXTUAL_ANIMATIONS", raising=False)
+    monkeypatch.setattr(tc, "COLOR_SYSTEM", "auto")
+    monkeypatch.setattr(tc, "TEXTUAL_ANIMATIONS", "full")
+
+    app_mod._apply_compat_palette()
+
+    assert tc.COLOR_SYSTEM == "standard"
+    assert tc.TEXTUAL_ANIMATIONS == "none"
+
+
+def test_apply_compat_palette_respects_user_env(monkeypatch):
+    import textual.constants as tc
+
+    import pycom.app as app_mod
+
+    monkeypatch.setenv("TEXTUAL_COLOR_SYSTEM", "256")
+    monkeypatch.setenv("TEXTUAL_ANIMATIONS", "none")
+    monkeypatch.setattr(tc, "COLOR_SYSTEM", "auto")
+    monkeypatch.setattr(tc, "TEXTUAL_ANIMATIONS", "full")
+
+    app_mod._apply_compat_palette()
+
+    assert tc.COLOR_SYSTEM == "auto"  # user env wins
+    assert tc.TEXTUAL_ANIMATIONS == "full"
+
+
+def test_cli_lang_and_compat_flags_parse():
+    from pycom.app import _parse_args
+
+    args = _parse_args(["--lang", "en", "--compat"])
+    assert args.lang == "en"
+    assert args.compat is True
+    assert args.no_compat is False
+
+    args = _parse_args(["--no-compat"])
+    assert args.no_compat is True
+
+
+def test_compat_marker_switches_to_ascii():
+    from pycom.compat import marker, set_ascii_ui
+
+    set_ascii_ui(False)
+    assert marker(True) == "●"
+    assert marker(False) == "○"
+
+    set_ascii_ui(True)
+    assert marker(True) == "[x]"
+    assert marker(False) == "[ ]"
+
+
+async def test_compat_mode_renders_ascii_checkbox_markers():
+    from pycom.compat import set_ascii_ui
+    from pycom.config import AppConfig
+    from pycom.screens.options import OptionsScreen
+
+    set_ascii_ui(True)
+    app = PyComApp(cfg=AppConfig(language="zh"))
+    async with app.run_test(size=(100, 32)) as pilot:
+        await pilot.pause()
+        app.push_screen(OptionsScreen())
+        await pilot.pause(0.3)
+        echo = app.screen_stack[-1].query_one("#echo")
+        rendered = str(echo.render())
+        assert "[ ]" in rendered
+        assert "○" not in rendered
+
+
+def test_compat_arrow_switches_to_ascii():
+    from pycom.compat import arrow, set_ascii_ui
+
+    set_ascii_ui(False)
+    assert arrow("down") == "▼"
+    assert arrow("up") == "▲"
+    assert arrow("right") == "▶"
+
+    set_ascii_ui(True)
+    assert arrow("down") == "v"
+    assert arrow("up") == "^"
+    assert arrow("right") == ">"
+
+
+async def test_compat_mode_renders_ascii_select_arrow():
+    from pycom.compat import set_ascii_ui
+    from pycom.config import AppConfig
+    from pycom.screens.options import OptionsScreen
+
+    set_ascii_ui(True)
+    app = PyComApp(cfg=AppConfig(language="zh"))
+    async with app.run_test(size=(100, 32)) as pilot:
+        await pilot.pause()
+        app.push_screen(OptionsScreen())
+        await pilot.pause(0.3)
+        scr = app.screen_stack[-1]
+        down = scr.query(".down-arrow").first()
+        assert "v" in str(down.render())
+        assert "▼" not in str(down.render())
+
+
+async def test_default_mode_renders_unicode_select_arrow():
+    from pycom.config import AppConfig
+    from pycom.screens.options import OptionsScreen
+
+    app = PyComApp(cfg=AppConfig(language="zh"))
+    async with app.run_test(size=(100, 32)) as pilot:
+        await pilot.pause()
+        app.push_screen(OptionsScreen())
+        await pilot.pause(0.3)
+        down = app.screen_stack[-1].query(".down-arrow").first()
+        assert "▼" in str(down.render())
+
+
+async def test_compat_mode_renders_ascii_collapsible_arrow():
+    from pycom.compat import set_ascii_ui
+    from pycom.config import AppConfig
+    from pycom.screens.connection import ConnectionScreen
+
+    set_ascii_ui(True)
+    app = PyComApp(cfg=AppConfig(language="zh"))
+    async with app.run_test(size=(110, 36)) as pilot:
+        await pilot.pause()
+        app.push_screen(ConnectionScreen())
+        await pilot.pause(0.3)
+        title = app.screen_stack[-1].query_one("#adv-params CollapsibleTitle")
+        assert ">" in str(title.render())
+
+
 # --------------------------------------------------------------------------- virtual loopback
 
 

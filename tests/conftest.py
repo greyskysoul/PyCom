@@ -22,6 +22,16 @@ def _force_chinese_language(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _reset_ascii_ui():
+    """Keep the process-wide ASCII-glyph flag from leaking between tests."""
+    from pycom import compat
+
+    compat.set_ascii_ui(False)
+    yield
+    compat.set_ascii_ui(False)
+
+
+@pytest.fixture(autouse=True)
 def _isolated_config_dir(monkeypatch, tmp_path):
     """Keep every test away from the real user config (language, ports, ...)."""
     import pycom.config as cfgmod

@@ -52,6 +52,20 @@ _EN: dict[str, str] = {
     ),
     "显示本帮助并退出": "Show this help and exit",
     "显示版本号并退出": "Show version and exit",
+    # --- 界面选项 / compat ---
+    "界面选项": "UI options",
+    "禁用鼠标捕获：终端不再上报鼠标，滚轮/点击由宿主终端自身处理": (
+        "Disable mouse capture: the terminal stops reporting the mouse; "
+        "wheel/click is handled by the host terminal"
+    ),
+    "强制界面语言：zh=中文 / en=英文（默认自动侦测系统语言）": (
+        "Force UI language: zh=Chinese / en=English (default: auto-detect)"
+    ),
+    "兼容模式：强制英文、16 色、无动画、无鼠标（Linux 控制台/init3 下自动启用）": (
+        "Compatibility mode: force English, 16 colors, no animations, no mouse "
+        "(auto-enabled on a Linux console/init3)"
+    ),
+    "禁用兼容模式的自动检测": "Disable automatic compatibility-mode detection",
     "连接参数": "Connection options",
     "串口，如 COM3 或 /dev/ttyUSB0": "Serial port, e.g. COM3 or /dev/ttyUSB0",
     "波特率": "Baud rate",
@@ -82,15 +96,17 @@ _EN: dict[str, str] = {
         "HEX receive/send.\n"
         "Run without arguments to open the interactive UI (Ctrl+A opens the menu)."
     ),
-    '示例：\n  pycom -p COM3 -b 115200\n  pycom -p COM3 -s "AT\\r"\n  pycom -p COM3 -f boot.txt -e 5\n  pycom -p COM3 --hex\n  pycom --bare -p COM3 -b 115200   # 无界面纯直通：stdin→串口，串口→stdout\n\n-s/-f 内容支持 \\n \\r \\t \\xHH 等转义；-e 支持小数秒。--bare 隐藏全部界面，仅供外部进程（如 AI agent）通过标准输入输出驱动。': (
+    '示例：\n  pycom -p COM3 -b 115200\n  pycom -p COM3 -s "AT\\r"\n  pycom -p COM3 -f boot.txt -e 5\n  pycom -p COM3 --hex\n  pycom -p COM3 --no-mouse\n  pycom --bare -p COM3 -b 115200   # 无界面纯直通：stdin→串口，串口→stdout\n\n-s/-f 内容支持 \\n \\r \\t \\xHH 等转义；-e 支持小数秒；--no-mouse 关闭鼠标捕获，把滚轮/点击交还宿主终端。\n--bare 隐藏全部界面，仅供外部进程（如 AI agent）通过标准输入输出驱动。': (
         "Examples:\n"
         "  pycom -p COM3 -b 115200\n"
         '  pycom -p COM3 -s "AT\\r"\n'
         "  pycom -p COM3 -f boot.txt -e 5\n"
         "  pycom -p COM3 --hex\n"
+        "  pycom -p COM3 --no-mouse\n"
         "  pycom --bare -p COM3 -b 115200   # headless pass-through: stdin->port, port RX->stdout\n"
         "\n"
-        "-s/-f accept escapes like \\n \\r \\t \\xHH; -e supports fractional seconds. "
+        "-s/-f accept escapes like \\n \\r \\t \\xHH; -e supports fractional seconds; --no-mouse disables "
+        "mouse capture and hands wheel/click back to the host terminal.\n"
         "--bare hides the whole UI and is driven over stdin/stdout by an external process (e.g. an AI agent)."
     ),
     "bare 直通已连接 {short}（stdin→串口，串口 RX→stdout）": (

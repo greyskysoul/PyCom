@@ -114,6 +114,7 @@ Button.-primary:hover {
 
 #hex-bar TextArea:focus {
     background: $hex-input-focus-bg;
+    color: $highlight-fg;
 }
 
 #hex-bar Button {
@@ -189,6 +190,7 @@ DataTable > .datatable--header {
 
 #conn-box .form-row Input:focus {
     background: $control-focus-bg;
+    color: $highlight-fg;
     border: none;
 }
 
@@ -411,6 +413,7 @@ MainMenuScreen {
 
 #options-body Input:focus {
     background: $control-focus-bg;
+    color: $highlight-fg;
     border: none;
 }
 
@@ -429,6 +432,16 @@ MainMenuScreen {
 #options-body Select:focus > SelectCurrent,
 #options-body SelectCurrent:focus {
     background: $control-focus-bg;
+}
+
+#options-body Select:focus > SelectCurrent > Static#label,
+#options-body SelectCurrent:focus > Static#label {
+    color: $highlight-fg;
+}
+
+#options-body Select:focus > SelectCurrent .arrow,
+#options-body SelectCurrent:focus .arrow {
+    color: $highlight-fg;
 }
 
 #options-body SelectCurrent > Static#label {
@@ -476,6 +489,7 @@ MainMenuScreen {
 
 #xfer-box .form-row Input:focus {
     background: $control-focus-bg;
+    color: $highlight-fg;
     border: none;
 }
 
@@ -523,6 +537,7 @@ MainMenuScreen {
 
 #picker-path:focus {
     background: $control-focus-bg;
+    color: $highlight-fg;
     border: none;
 }
 
@@ -605,6 +620,7 @@ Vertical#conn-box.compact #conn-body {
 
 #conn-box.compact .c-row Input:focus {
     background: $control-focus-bg;
+    color: $highlight-fg;
     border: none;
 }
 
@@ -622,6 +638,16 @@ Vertical#conn-box.compact #conn-body {
 #conn-box.compact .c-row Select:focus > SelectCurrent,
 #conn-box.compact SelectCurrent:focus {
     background: $control-focus-bg;
+}
+
+#conn-box.compact .c-row Select:focus > SelectCurrent > Static#label,
+#conn-box.compact SelectCurrent:focus > Static#label {
+    color: $highlight-fg;
+}
+
+#conn-box.compact .c-row Select:focus > SelectCurrent .arrow,
+#conn-box.compact SelectCurrent:focus .arrow {
+    color: $highlight-fg;
 }
 
 #conn-box.compact SelectCurrent > Static#label {

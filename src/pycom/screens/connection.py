@@ -9,6 +9,7 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Button, Collapsible, DataTable, Input, Label, Select, Static
 
+from pycom.compat import arrow
 from pycom.config import ConnectionSettings
 from pycom.i18n import tr
 from pycom.screens.base import AdaptiveModal, FieldSelect
@@ -39,7 +40,13 @@ class _ConnRich(Vertical):
             yield Label(tr("波特率"), classes="form-label")
             yield Input("", id="baud", placeholder=_PORT_PLACEHOLDERS["baud"], compact=True)
         # 数据位/校验/停止位/流控 属于不常用参数，默认折叠在“高级参数”里
-        with Collapsible(title=tr("高级参数"), collapsed=True, id="adv-params"):
+        with Collapsible(
+            title=tr("高级参数"),
+            collapsed=True,
+            collapsed_symbol=arrow("right"),
+            expanded_symbol=arrow("down"),
+            id="adv-params",
+        ):
             with Horizontal(classes="form-row"):
                 yield Label(tr("数据位"), classes="form-label")
                 yield Input(
@@ -85,7 +92,13 @@ class _ConnCompact(Vertical):
                     compact=True,
                 )
             # 数据位/校验/停止位/流控 属于不常用参数，默认折叠在“高级参数”里
-            with Collapsible(title=tr("高级参数"), collapsed=True, id="adv-params"):
+            with Collapsible(
+                title=tr("高级参数"),
+                collapsed=True,
+                collapsed_symbol=arrow("right"),
+                expanded_symbol=arrow("down"),
+                id="adv-params",
+            ):
                 for label in ("数据位", "校验", "停止位", "流控"):
                     cid = {
                         "数据位": "bytesize",

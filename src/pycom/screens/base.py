@@ -24,8 +24,24 @@ from textual.widgets import (
     Static,
 )
 from textual.widgets._collapsible import CollapsibleTitle
+from textual.widgets._select import NonSelectableStatic, SelectCurrent, SelectOverlay
 
+from pycom.compat import arrow
 from pycom.i18n import tr
+
+
+class _FieldSelectCurrent(SelectCurrent):
+    """Dropdown current-value row using compatibility-safe arrow glyphs.
+
+    Textual hard-codes ``▼``/``▲`` in :meth:`SelectCurrent.compose`; on the
+    Linux console those may be missing from the font, so compatibility mode
+    swaps them for ASCII ``v``/``^`` (see :mod:`pycom.compat`).
+    """
+
+    def compose(self) -> ComposeResult:
+        yield NonSelectableStatic(self.placeholder, id="label")
+        yield NonSelectableStatic(arrow("down"), classes="arrow down-arrow")
+        yield NonSelectableStatic(arrow("up"), classes="arrow up-arrow")
 
 
 class FieldSelect(Select, inherit_bindings=False):
@@ -37,6 +53,11 @@ class FieldSelect(Select, inherit_bindings=False):
     """
 
     BINDINGS = [Binding("enter,space", "show_overlay", "打开", show=False)]
+
+    def compose(self) -> ComposeResult:
+        # 与 Select.compose 一致，只是把 SelectCurrent 换成兼容版箭头。
+        yield _FieldSelectCurrent(self.prompt)
+        yield SelectOverlay(type_to_search=self._type_to_search).data_bind(compact=Select.compact)
 
 
 def _is_effectively_displayed(widget: Widget) -> bool:
