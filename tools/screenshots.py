@@ -50,7 +50,7 @@ async def _shot(app: PyComApp, pilot, name: str, title: str) -> None:
 
 async def main() -> None:
     # -- 1. main terminal (loopback + demo device output) -----------------------
-    app = PyComApp(cfg=AppConfig(hex_mode=False))
+    app = PyComApp(cfg=AppConfig(language="en", hex_mode=False))
     async with app.run_test(size=(110, 30)) as pilot:
         await pilot.pause(0.3)
         app.open_loopback()
@@ -61,7 +61,7 @@ async def main() -> None:
         await _shot(app, pilot, "main.svg", "PyCom - main terminal")
 
     # -- 2. main menu popup ------------------------------------------------------
-    app = PyComApp(cfg=AppConfig(hex_mode=False))
+    app = PyComApp(cfg=AppConfig(language="en", hex_mode=False))
     async with app.run_test(size=(110, 30)) as pilot:
         await pilot.pause(0.3)
         app.model.feed_bytes(MAIN_DEMO)
@@ -71,7 +71,7 @@ async def main() -> None:
         await _shot(app, pilot, "menu.svg", "PyCom - main menu")
 
     # -- 3. HEX receive with ASCII pane -----------------------------------------
-    app = PyComApp(cfg=AppConfig(hex_mode=True))
+    app = PyComApp(cfg=AppConfig(language="en", hex_mode=True))
     async with app.run_test(size=(110, 30)) as pilot:
         await pilot.pause(0.3)
         app.open_loopback()
@@ -81,7 +81,7 @@ async def main() -> None:
         await _shot(app, pilot, "hex.svg", "PyCom - HEX mode with ASCII pane")
 
     # -- 4. options screen -------------------------------------------------------
-    app = PyComApp(cfg=AppConfig(hex_mode=False))
+    app = PyComApp(cfg=AppConfig(language="en", hex_mode=False))
     async with app.run_test(size=(110, 30)) as pilot:
         await pilot.pause(0.3)
         await pilot.press("ctrl+a")
