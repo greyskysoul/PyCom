@@ -15,9 +15,11 @@ block_cipher = None
 spec_dir = Path(SPECPATH)  # the directory containing this spec file (packaging/)
 repo_root = spec_dir.parent
 
-# ship app.tcss so importlib.resources can find it in the frozen bundle
+# ship app.tcss + the bundled colour themes so importlib.resources can find
+# them in the frozen bundle
 datas = [
     (str(repo_root / "src" / "pycom" / "resources" / "app.tcss"), "pycom/resources"),
+    (str(repo_root / "src" / "pycom" / "resources" / "themes"), "pycom/resources/themes"),
 ]
 
 a = Analysis(
@@ -28,6 +30,7 @@ a = Analysis(
     hiddenimports=[
         "serial.tools.list_ports",
         "serial.tools.list_ports_common",
+        "textual.widgets._tab_pane",
     ],
     hookspath=[],
     hooksconfig={},
@@ -65,7 +68,6 @@ a = Analysis(
         "_multiprocessing",
         "_wmi",
         # Textual 未使用、且未被核心/已用组件引用的组件
-        "textual.widgets._content_switcher",
         "textual.widgets._digits",
         "textual.widgets._footer",
         "textual.widgets._header",
@@ -85,8 +87,6 @@ a = Analysis(
         "textual.widgets._selection_list",
         "textual.widgets._sparkline",
         "textual.widgets._switch",
-        "textual.widgets._tabbed_content",
-        "textual.widgets._tabs",
         "textual.widgets._welcome",
     ],
     win_no_prefer_redirects=False,

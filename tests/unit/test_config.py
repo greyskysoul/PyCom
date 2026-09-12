@@ -46,3 +46,4 @@ def test_load_corrupt_returns_defaults(tmp_config_dir):
 def test_theme_defaults_to_auto(tmp_config_dir):
     cfg = cfgmod.load_config()
     assert cfg.theme == "auto"
+    assert cfg.theme_mode == "auto"

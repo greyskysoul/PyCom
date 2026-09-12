@@ -40,7 +40,7 @@
 ## 特性
 
 - **全屏终端界面**：设备 ANSI/VT 输出正确渲染、可滚动回看。
-- **浅色/深色主题**：One Half 配色，可在选项页切换；“自动”模式跟随终端背景（OSC 11）或系统主题。
+- **浅色/深色主题**：One Half 配色，一套主题同时含深浅两套变体，可在选项页切换；“自动”模式跟随终端背景（OSC 11）。可放入 JSON 主题文件自定义。
 - **Ctrl+A 前缀键 + 弹层菜单**（minicom 交互习惯）。
 - **YMODEM 发送 / 接收**：CRC-16-CCITT、128/1024 字节块可配置、超时重传、进度显示、可取消。
 - **ZMODEM 传输**：与 lrzsz 兼容的协议引擎（通过 `Ctrl+A` `S`/`R` 选择）。
@@ -94,8 +94,8 @@ pycom --lang en
 pycom --bare -p COM3 -b 115200
 ```
 
-> 移除 `-d/-s/-f` 缩写：数据位/停止位/流控请用全称 `--data-bits`/`--stop-bits`/`--flow`；
-> `-s`/`-f` 已改作“启动后发送字符串/脚本”，需配合 `-p/--port`。
+> 数据位/停止位/流控请用全称 `--data-bits`/`--stop-bits`/`--flow`；
+> `-s`/`-f` 表示“启动后发送字符串/脚本”，需配合 `-p/--port`。
 >
 > `--bare` 为隐藏全部界面的纯直通模式：只使用连接参数（`-p/-b/--parity/...`），
 > 不能与 `-s/-f/-e/--hex` 等交互启动选项混用。
@@ -197,7 +197,9 @@ src/pycom/
   xfer/ymodem.py      YMODEM 双向协议引擎（纯 Python、可脱离串口单测）
   xfer/zmodem.py      ZMODEM 传输引擎（纯 Python、可脱离串口单测）
   screens/            连接、主菜单、选项、文件/目录选择、收发传输界面
-  resources/app.tcss  主题
+  theme.py            主题文件加载（JSON，深浅色变体 / 用户主题目录）
+  resources/app.tcss  界面样式（只用主题变量）
+  resources/themes/   主题文件（one-half.json = One Half 深浅色两套变体）
 tests/unit/           CRC/帧/block0、引擎回环(含错误注入)、按键、终端模型、Pilot UI
 packaging/            PyInstaller 启动器与 spec
 ```
@@ -206,6 +208,28 @@ packaging/            PyInstaller 启动器与 spec
 
 配置文件为 JSON（`%APPDATA%\pycom\config.json` Windows /
 `~/.config/pycom/config.json` Linux），可通过 Ctrl+A O 修改并在运行中保存。
+
+## 主题
+
+界面配色来自主题文件，一套主题同时提供**深色**与**浅色**两套变体；选项页
+Ctrl+A O → 外观 里选择主题与模式（自动 = 跟随终端背景 / 深色 / 浅色）。
+
+自定义主题：把 JSON 文件放进用户配置目录下的 `themes/`（同上路径）：
+
+```json
+{
+  "name": "my-theme",
+  "label": "My Theme",
+  "variants": {
+    "dark":  { "primary": "#61afef", "variables": { "control-bg": "#3a4048" } },
+    "light": { "primary": "#0184bc", "variables": { "control-bg": "#ffffff" } }
+  }
+}
+```
+
+`primary` 是唯一必填项，`variables` 里未写的键沿用默认值；键名与含义见
+`src/pycom/theme.py` 模块文档。非真彩色终端可用 `"ansi": true` + `ansi_red`
+这类 ANSI 基础色名，兼容模式（`--compat`）的 ANSI 主题就是内置的这种写法。
 
 ## 已知范围（Roadmap）
 

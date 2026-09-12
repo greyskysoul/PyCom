@@ -40,7 +40,7 @@ Built for embedded firmware flashing (STM32 &amp; other ymodem bootloaders) and 
 ## Features
 
 - **Full-screen terminal UI** — device ANSI/VT output is rendered correctly, with scrollable history.
-- **Light / dark themes** — One Half palette, switchable in Options; “Auto” follows the terminal background (OSC 11) or the system theme.
+- **Light / dark themes** — the One Half palette; one theme ships both variants, switchable in Options (“Auto” follows the terminal background via OSC 11). Extra themes are plain JSON files.
 - **Ctrl+A prefix-key + overlay menu** — familiar minicom interaction model.
 - **YMODEM send / receive** — CRC-16-CCITT, configurable 128/1024-byte blocks, timeout retransmission, progress display, cancellable.
 - **ZMODEM transfer** — lrzsz-compatible engine (pick it via `Ctrl+A` `S`/`R`).
@@ -94,8 +94,8 @@ pycom --lang en
 pycom --bare -p COM3 -b 115200
 ```
 
-> The `-d/-s/-f` shorthands are gone: use the full names `--data-bits`/`--stop-bits`/`--flow`
-> for data bits / stop bits / flow control. `-s`/`-f` now mean "send string/script after
+> Data bits / stop bits / flow control use the full names
+> `--data-bits`/`--stop-bits`/`--flow`. `-s`/`-f` mean "send string/script after
 > connecting" and require `-p/--port`.
 >
 > `--bare` is a UI-less pure pass-through mode: it only uses the connection parameters
@@ -153,14 +153,8 @@ pycom --bare -p COM3 -b 115200
 ## Development
 
 ```bash
-pytest            # unit tests: CRC / frames / YMODEM loopback, etc.
-ruff check .      # static checks
-mypy src/pycom    # type checks
+python tools/check.py   # ruff / format / mypy / unit tests (same entry point as CI)
 ```
-
-Layout: `src/pycom/` (`serialio.py` serial I/O, `termdisplay/` terminal rendering,
-`xfer/ymodem.py` protocol engine, `screens/` the individual screens, `keys.py` key state
-machine, `app.py` main program).
 
 ## Packaging
 
@@ -206,7 +200,9 @@ src/pycom/
   xfer/ymodem.py      YMODEM bidirectional protocol engine (pure Python, unit-testable without serial)
   xfer/zmodem.py      ZMODEM transfer engine (pure Python, unit-testable without serial)
   screens/            connection, main menu, options, file/dir picker, transfer screens
-  resources/app.tcss  theme
+  theme.py            theme-file loader (JSON, dark+light variants, user theme dir)
+  resources/app.tcss  stylesheet (consumes theme variables only)
+  resources/themes/   theme files (one-half.json = One Half, both variants)
 tests/unit/           CRC/frame/block0, engine loopback (incl. error injection), keys, terminal model, Pilot UI
 packaging/            PyInstaller launcher and spec
 ```
@@ -215,6 +211,31 @@ packaging/            PyInstaller launcher and spec
 
 The config file is JSON (`%APPDATA%\pycom\config.json` on Windows /
 `~/.config/pycom/config.json` on Linux); edit it via Ctrl+A O and it saves during runtime.
+
+## Themes
+
+Colours come from theme files: one theme ships **both a dark and a light**
+variant.  Pick the theme and the mode (Auto = follow the terminal background /
+dark / light) in Ctrl+A O → Appearance.
+
+To add your own theme, drop a JSON file into the `themes/` folder next to the
+config file:
+
+```json
+{
+  "name": "my-theme",
+  "label": "My Theme",
+  "variants": {
+    "dark":  { "primary": "#61afef", "variables": { "control-bg": "#3a4048" } },
+    "light": { "primary": "#0184bc", "variables": { "control-bg": "#ffffff" } }
+  }
+}
+```
+
+`primary` is the only required key; unlisted `variables` keep their defaults
+(the full key list lives in the `src/pycom/theme.py` docstring).  For an
+8/16-colour terminal use `"ansi": true` with ANSI base-colour names such as
+`ansi_red` — that is how the built-in compatibility theme is written.
 
 ## Known scope (Roadmap)
 

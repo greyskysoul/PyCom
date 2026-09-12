@@ -1534,10 +1534,17 @@ def test_cli_lang_and_compat_flags_parse():
 def test_compat_uses_dedicated_theme():
     from pycom.config import AppConfig
 
-    assert PyComApp(cfg=AppConfig(theme="dark")).theme == "pycom-dark"
-    assert PyComApp(cfg=AppConfig(theme="light")).theme == "pycom-light"
-    assert PyComApp(cfg=AppConfig(theme="dark"), compat=True).theme == "pycom-compat"
-    assert PyComApp(cfg=AppConfig(theme="light"), compat=True).theme == "pycom-compat"
+    assert PyComApp(cfg=AppConfig(theme="one-half", theme_mode="dark")).theme == "one-half-dark"
+    assert PyComApp(cfg=AppConfig(theme="one-half", theme_mode="light")).theme == "one-half-light"
+    # 旧配置（模式存在 theme 里）仍然可用
+    assert PyComApp(cfg=AppConfig(theme="dark")).theme == "one-half-dark"
+    assert PyComApp(cfg=AppConfig(theme="light")).theme == "one-half-light"
+    # 兼容模式强制使用内置的 ANSI 主题
+    for cfg in (
+        AppConfig(theme="one-half", theme_mode="dark"),
+        AppConfig(theme="one-half", theme_mode="light"),
+    ):
+        assert PyComApp(cfg=cfg, compat=True).theme == "pycom-compat-dark"
 
 
 async def test_compat_theme_fills_unfocused_inputs_with_ansi_colour():
@@ -2020,6 +2027,46 @@ async def test_options_compact_on_small_window():
         await pilot.press("enter")
         await pilot.pause(0.2)
         assert len(app.screen_stack) == 1
+
+
+async def test_options_compact_tab_bar_shares_the_page_background():
+    """简洁模式下整页（含页签栏）同色：ContentTabs 的规则用 $surface（富布局下
+    等于盒子底色），简洁模式的盒子是 $compact-bg，不覆盖会在页签栏留下异色横带。"""
+    from textual.widgets import Tabs
+
+    from pycom.config import AppConfig
+    from pycom.screens.options import OptionsScreen
+
+    for mode in ("dark", "light"):
+        app = PyComApp(cfg=AppConfig(language="zh", theme="one-half", theme_mode=mode))
+        async with app.run_test(size=(58, 15)) as pilot:
+            await pilot.pause(0.3)
+            app.push_screen(OptionsScreen())
+            await pilot.pause(0.4)
+            scr = app.screen_stack[-1]
+            box = scr.query_one("#options-box")
+            assert box.has_class("compact") is True
+            tabs = scr.query_one("#options-body Tabs", Tabs)
+            assert tabs.styles.background == box.styles.background, mode
+
+
+async def test_options_rich_tab_bar_shares_the_page_background():
+    """富布局下页签栏同样与盒子同色（$surface）。"""
+    from textual.widgets import Tabs
+
+    from pycom.config import AppConfig
+    from pycom.screens.options import OptionsScreen
+
+    app = PyComApp(cfg=AppConfig(language="zh", theme="one-half", theme_mode="dark"))
+    async with app.run_test(size=(110, 32)) as pilot:
+        await pilot.pause(0.3)
+        app.push_screen(OptionsScreen())
+        await pilot.pause(0.4)
+        scr = app.screen_stack[-1]
+        box = scr.query_one("#options-box")
+        assert box.has_class("compact") is False
+        tabs = scr.query_one("#options-body Tabs", Tabs)
+        assert tabs.styles.background == box.styles.background
 
 
 async def test_options_switches_layout_when_resized_and_keeps_edits():
@@ -2527,23 +2574,27 @@ def test_resolve_theme_modes():
     from pycom.app import PyComApp
     from pycom.config import AppConfig
 
-    app = PyComApp(cfg=AppConfig(theme="light"))
-    assert app._resolve_theme(None) == "pycom-light"
-    app.cfg.theme = "dark"
-    assert app._resolve_theme(None) == "pycom-dark"
-    app.cfg.theme = "auto"
-    assert app._resolve_theme(True) == "pycom-dark"
-    assert app._resolve_theme(False) == "pycom-light"
-    assert app._resolve_theme(None) == "pycom-dark"
+    app = PyComApp(cfg=AppConfig(theme="one-half", theme_mode="light"))
+    assert app._resolve_theme(None) == "one-half-light"
+    app.cfg.theme_mode = "dark"
+    assert app._resolve_theme(None) == "one-half-dark"
+    app.cfg.theme_mode = "auto"
+    assert app._resolve_theme(True) == "one-half-dark"
+    assert app._resolve_theme(False) == "one-half-light"
+    assert app._resolve_theme(None) == "one-half-dark"
+    # 未知主题名回退到默认主题
+    app.cfg.theme = "nope"
+    assert app._resolve_theme(True) == "one-half-dark"
 
 
 async def test_app_registers_themes_and_applies_light():
     from pycom.app import PyComApp
     from pycom.config import AppConfig
 
-    app = PyComApp(cfg=AppConfig(theme="light"))
+    app = PyComApp(cfg=AppConfig(theme="one-half", theme_mode="light"))
     async with app.run_test(size=(100, 28)) as pilot:
         await pilot.pause()
-        assert app.theme == "pycom-light"
-        assert "pycom-dark" in app.available_themes
-        assert "pycom-light" in app.available_themes
+        assert app.theme == "one-half-light"
+        assert "one-half-dark" in app.available_themes
+        assert "one-half-light" in app.available_themes
+        assert "pycom-compat-dark" in app.available_themes

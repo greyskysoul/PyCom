@@ -10,6 +10,7 @@ from textual.content import Content
 from textual.widget import Widget
 from textual.widgets import Button, Checkbox, Input, Label, Static, TabbedContent, TabPane
 
+from pycom import theme as thememod
 from pycom.compat import marker
 from pycom.config import save_config
 from pycom.i18n import tr
@@ -60,14 +61,17 @@ def _decode_options() -> list[tuple[str, str]]:
     ]
 
 
-_THEME_VALUES = frozenset(("auto", "light", "dark"))
-
-
 def _theme_options() -> list[tuple[str, str]]:
+    """主题列表：主题文件里的每个主题（隐藏的内置主题不列出）。"""
+    return [(label, name) for name, label in thememod.theme_labels().items()]
+
+
+def _mode_options() -> list[tuple[str, str]]:
+    """外观模式：自动（跟随终端底色）/ 浅色 / 深色。"""
     return [
-        (tr("\u81ea\u52a8"), "auto"),
-        (tr("\u6d45\u8272"), "light"),
-        (tr("\u6df1\u8272"), "dark"),
+        (tr("\u81ea\u52a8"), thememod.MODE_AUTO),
+        (tr("\u6d45\u8272"), thememod.VARIANT_LIGHT),
+        (tr("\u6df1\u8272"), thememod.VARIANT_DARK),
     ]
 
 
@@ -103,6 +107,8 @@ class _OptionsRich(Vertical):
             with TabPane(tr("\u5916\u89c2")), Horizontal(classes="form-row"):
                 yield Label(tr("\u4e3b\u9898"), classes="form-label")
                 yield FieldSelect(_theme_options(), id="theme", allow_blank=False, compact=True)
+                yield Label(tr("\u6a21\u5f0f"), classes="form-label")
+                yield FieldSelect(_mode_options(), id="theme_mode", allow_blank=False, compact=True)
             with TabPane(tr("\u6587\u4ef6\u4f20\u8f93")):
                 with Horizontal(classes="form-row"):
                     yield Label(tr("传输超时(s)"), classes="form-label")
@@ -148,6 +154,10 @@ class _OptionsCompact(Vertical):
                 yield from _field_row(
                     tr("\u4e3b\u9898"),
                     FieldSelect(_theme_options(), id="theme", allow_blank=False, compact=True),
+                )
+                yield from _field_row(
+                    tr("\u6a21\u5f0f"),
+                    FieldSelect(_mode_options(), id="theme_mode", allow_blank=False, compact=True),
                 )
             with TabPane(tr("\u6587\u4ef6\u4f20\u8f93")):
                 yield from _field_row(
@@ -207,7 +217,12 @@ class OptionsScreen(AdaptiveModal):
         self.query_one("#retries", Input).value = str(cfg.xfer_retries)
         self.query_one("#blocksize", Input).value = str(cfg.xfer_block_size)
         theme = self.query_one("#theme", FieldSelect)
-        theme.value = cfg.theme if cfg.theme in _THEME_VALUES else "auto"
+        available = {value for _label, value in _theme_options()}
+        stored, mode = thememod.split_selection(cfg.theme, cfg.theme_mode)
+        theme.value = stored if stored in available else thememod.DEFAULT_THEME
+        mode_sel = self.query_one("#theme_mode", FieldSelect)
+        modes = {value for _label, value in _mode_options()}
+        mode_sel.value = mode if mode in modes else thememod.MODE_AUTO
         # 进入即选中第一项，方向键才能直接上下移动
         self.query_one("#echo", Checkbox).focus()
 
@@ -230,6 +245,7 @@ class OptionsScreen(AdaptiveModal):
         cfg.backspace_sends = str(self.query_one("#back", FieldSelect).value)
         cfg.decode = str(self.query_one("#decode", FieldSelect).value)
         cfg.theme = str(self.query_one("#theme", FieldSelect).value)
+        cfg.theme_mode = str(self.query_one("#theme_mode", FieldSelect).value)
         try:
             cfg.xfer_timeout = float(self.query_one("#timeout", Input).value)
             cfg.xfer_retries = int(self.query_one("#retries", Input).value)
@@ -240,5 +256,5 @@ class OptionsScreen(AdaptiveModal):
             cfg.xfer_block_size = 1024
         save_config(cfg)
         self.app.apply_config()  # type: ignore[attr-defined]
-        self.app.set_theme_mode(cfg.theme)  # type: ignore[attr-defined]
+        self.app.set_theme(cfg.theme, cfg.theme_mode)  # type: ignore[attr-defined]
         self.dismiss(None)

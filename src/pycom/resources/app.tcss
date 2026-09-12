@@ -54,8 +54,8 @@ Screen {
     height: 1;
     min-width: 7;
     border: none;
-    background: $menu-btn-bg;
-    color: $menu-btn-fg;
+    background: $accent-btn-bg;
+    color: $accent-btn-fg;
     padding: 0 1;
     margin: 0;
     content-align: left middle;
@@ -64,8 +64,8 @@ Screen {
 
 #menu-btn:hover,
 #menu-btn:focus {
-    background: $menu-btn-hover-bg;
-    color: $menu-btn-fg;
+    background: $accent-btn-hover-bg;
+    color: $accent-btn-fg;
     text-style: bold;
 }
 
@@ -84,14 +84,15 @@ Input:hover {
 SelectCurrent:hover {
     background: $hover-bg;
 }
-/* primary 按钮保持蓝色（App CSS 会覆盖 Textual 默认 CSS，需显式恢复） */
+/* 重点色按钮（左下角“菜单”、各对话框主按钮如“连接/保存”）：统一使用主题文件
+   的 accent-btn-* 变量（Textual 默认的 primary-muted 在深色下偏灰，故显式覆盖）。 */
 Button.-primary {
-    background: $primary-btn-bg;
-    color: $primary-btn-fg;
+    background: $accent-btn-bg;
+    color: $accent-btn-fg;
 }
 Button.-primary:hover {
-    background: $primary-btn-hover-bg;
-    color: $primary-btn-fg;
+    background: $accent-btn-hover-bg;
+    color: $accent-btn-fg;
 }
 
 /* 兼容（ANSI）模式下 Textual 默认主题会在按下时给 -active 按钮加一圈 blank 边框
@@ -107,7 +108,7 @@ Button:ansi.-style-default.-textual-compact.-active {
 #hex-bar {
     height: auto;
     background: $hex-bg;
-    border-top: round #2a3142;
+    border-top: round $hex-bar-border;
     padding: 0 1;
 }
 
@@ -233,6 +234,12 @@ DataTable > .datatable--header {
     text-style: bold;
 }
 
+/* 去掉 Collapsible 默认的 :focus-within $foreground 5% background-tint：
+   叠加后与未聚焦字段底色几乎相同，字段会“融进”块背景。 */
+#conn-box Collapsible:focus-within {
+    background-tint: transparent;
+}
+
 /* 折叠容器内第一行字段紧贴标题，避免多出一行空隙 */
 #conn-box Collapsible .form-row:first-of-type {
     margin-top: 0;
@@ -253,9 +260,8 @@ Vertical#xfer-box {
     max-width: 66;
 }
 
-/* 左下角浮动功能菜单（弹出式，替换旧的整屏菜单界面）：
-   推入的 Screen + 半透明背景：底层终端内容与状态栏变暗但可见（UI 应用
-   弹出菜单效果）；&:ansi 时退回透明（老式终端不变暗，内容仍透出）。 */
+/* 左下角浮动功能菜单：推入的 Screen + 半透明背景，底层终端与状态栏
+   变暗但可见；&:ansi 时退回透明（老式终端不变暗，内容仍透出）。 */
 MainMenuScreen {
     background: $background 60%;
     align: left bottom;
@@ -389,7 +395,7 @@ MainMenuScreen {
     background-tint: $foreground 8%;
 }
 
-/* 焦点/悬停时整行高亮，替代原来的边框 */
+/* 焦点/悬停时整行高亮 */
 #options-body Checkbox:focus > .toggle--label,
 #options-body Checkbox:hover > .toggle--label {
     background: $highlight-bg;
@@ -565,6 +571,13 @@ Vertical#options-box.compact #options-body,
 Vertical#conn-box.compact #conn-body {
     height: 1fr;
     margin: 0 0 1 0;
+}
+
+/* 简洁模式整页共用 $compact-bg：上面的 ContentTabs 规则用的是 $surface（富布局下
+   等于盒子底色），简洁模式的盒子是 $compact-bg，不覆盖就会在 tab 条处留下一条
+   异色横带。 */
+Vertical#options-box.compact #options-body ContentTabs {
+    background: $compact-bg;
 }
 
 .compact .c-row {

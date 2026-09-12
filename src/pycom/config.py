@@ -84,8 +84,12 @@ class AppConfig:
     scrollback: int = 4000
     # UI language: "zh" | "en" | "" (= auto: detect the OS language at startup)
     language: str = ""
-    # Color theme: "auto" | "light" | "dark" ("auto" = follow the terminal)
+    # Colour theme: "auto" (= the bundled default theme) or a theme name from a
+    # theme file (see pycom.theme).
     theme: str = "auto"
+    # Appearance within that theme: "auto" (= follow the terminal background) |
+    # "dark" | "light".  Every theme defines both variants.
+    theme_mode: str = "auto"
 
 
 def _config_dir() -> str:
@@ -94,6 +98,15 @@ def _config_dir() -> str:
 
 def config_path() -> str:
     return os.path.join(_config_dir(), "config.json")
+
+
+def themes_dir() -> str:
+    """Folder holding user theme files (one ``*.json`` per theme).
+
+    Dropping a theme file here adds/overrides a colour theme; see
+    :mod:`pycom.theme` for the file format.
+    """
+    return os.path.join(_config_dir(), "themes")
 
 
 def load_config() -> AppConfig:

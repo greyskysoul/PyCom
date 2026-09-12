@@ -1,10 +1,9 @@
-"""Floating main-menu popup that replaces the old full-screen menu screen.
+"""Floating main-menu popup.
 
-The menu is a pushed Screen with a translucent background, so the terminal
-content and status bar behind it stay visible (dimmed) — like a UI app's
-popup menu.  The menu box is anchored at the bottom-left (the anchor is the
-菜单 button in the bottom row).  Arrow keys move the highlight, Enter / Space
-or the leading letter runs an item, Esc or clicking outside the box closes it.
+A pushed Screen with a translucent background keeps the terminal and status
+bar behind it visible (dimmed); the box is anchored at the bottom-left, next
+to the 菜单 button.  Arrow keys move the highlight, Enter / Space or the
+leading letter runs an item, Esc or clicking outside closes it.
 """
 
 from __future__ import annotations

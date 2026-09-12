@@ -35,6 +35,7 @@ _current: str = LANG_ZH
 _EN: dict[str, str] = {
     # --- theme ---
     "\u4e3b\u9898": "Theme",
+    "\u6a21\u5f0f": "Mode",
     "\u81ea\u52a8": "Auto",
     "\u6d45\u8272": "Light",
     "\u6df1\u8272": "Dark",

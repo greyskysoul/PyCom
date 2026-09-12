@@ -93,21 +93,15 @@ class TerminalModel:
 
     # -- sizing -------------------------------------------------------------------------
     def resize(self, columns: int, lines: int) -> None:
-        """Resize the terminal, preserving both visible content and scrollback.
+        """Resize the terminal, preserving visible content and scrollback.
 
-        The old implementation rebuilt the screen from scratch, which blanked
-        the visible area (and the freshly-arrived rows at the bottom with it),
-        so resizing the terminal appeared to wipe out the whole history.
-
-        Height shrink is done by hand rather than via pyte's ``Screen.resize``:
-        pyte's ``delete_lines`` only moves rows that already exist in its
-        (sparse) buffer, so on a screen with blank rows below, the top row never
-        actually scrolls off — it would end up both in the scrollback and still
-        visible, and get captured again on the next shrink (duplicated history).
-        Here we capture the top rows into the scrollback first, then shift the
-        remaining rows up ourselves.  Width changes just clip the captured
-        history and the live rows.  The stream keeps referencing the same screen
-        object, so it stays valid without being rebuilt.
+        Height shrink is done by hand instead of pyte's ``Screen.resize``:
+        pyte's ``delete_lines`` only moves rows already in its (sparse) buffer,
+        so blank rows below leave the top row visible and it gets captured
+        again on the next shrink (duplicated history).  The top rows move into
+        the scrollback first, then the survivors shift up.  Width changes just
+        clip the history and the live rows; the stream keeps referencing the
+        same screen object.
         """
         columns = max(1, columns)
         lines = max(1, lines)

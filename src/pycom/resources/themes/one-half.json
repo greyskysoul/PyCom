@@ -1,0 +1,119 @@
+{
+  "name": "one-half",
+  "label": "One Half",
+  "ansi": false,
+
+  "variants": {
+    "dark": {
+      "primary": "#61afef",
+      "secondary": "#56b6c2",
+      "accent": "#e5c07b",
+      "warning": "#e5c07b",
+      "error": "#e06c75",
+      "success": "#98c379",
+      "foreground": "#dcdfe4",
+      "background": "#282c34",
+      "surface": "#313640",
+      "panel": "#313640",
+
+      "variables": {
+        "term-bg": "#282c34",
+        "term-fg": "#dcdfe4",
+        "muted": "#5c6370",
+        "faint": "#5c6370",
+        "label": "#919baa",
+        "placeholder": "#5c6370",
+        "accent": "#61afef",
+        "error": "#e06c75",
+        "border": "#474e5d",
+
+        "control-bg": "#3a4048",
+        "control-focus-bg": "#474e5d",
+        "control-fg": "#dcdfe4",
+        "button-bg": "#3a4048",
+        "hover-bg": "#4a5260",
+        "checkbox-fg": "#dcdfe4",
+        "toggle-off": "#5c6370",
+
+        "highlight-bg": "#474e5d",
+        "highlight-fg": "#dcdfe4",
+
+        "accent-btn-bg": "#3b82f6",
+        "accent-btn-fg": "#ffffff",
+        "accent-btn-hover-bg": "#4a90e0",
+
+        "table-header-bg": "#3a4048",
+        "table-header-fg": "#dcdfe4",
+        "compact-bg": "#282c34",
+
+        "hex-bg": "#313640",
+        "hex-input-bg": "#313640",
+        "hex-input-focus-bg": "#282c34",
+        "hex-input-fg": "#dcdfe4",
+        "hex-bar-border": "#2a3142",
+        "hex-caret-fg": "#9aa7b8",
+        "hex-ascii-dot-fg": "#787878",
+
+        "cursor-block-bg": "#dde4ee",
+        "cursor-block-fg": "#0b0c12",
+        "cursor-inactive-fg": "#9aa7b8"
+      }
+    },
+
+    "light": {
+      "primary": "#0184bc",
+      "secondary": "#0997b3",
+      "accent": "#c18401",
+      "warning": "#c18401",
+      "error": "#e45649",
+      "success": "#50a14f",
+      "foreground": "#383a42",
+      "background": "#fafafa",
+      "surface": "#f5f5f5",
+      "panel": "#e8e8e8",
+
+      "variables": {
+        "term-bg": "#fafafa",
+        "term-fg": "#383a42",
+        "muted": "#a0a1a7",
+        "faint": "#a0a1a7",
+        "label": "#a0a1a7",
+        "placeholder": "#a0a1a7",
+        "accent": "#0184bc",
+        "error": "#e45649",
+        "border": "#d4d4d4",
+
+        "control-bg": "#ffffff",
+        "control-focus-bg": "#f0f0f0",
+        "control-fg": "#383a42",
+        "button-bg": "#ffffff",
+        "hover-bg": "#f0f0f0",
+        "checkbox-fg": "#383a42",
+        "toggle-off": "#a0a1a7",
+
+        "highlight-bg": "#e0e0e0",
+        "highlight-fg": "#383a42",
+
+        "accent-btn-bg": "#4a90d9",
+        "accent-btn-fg": "#ffffff",
+        "accent-btn-hover-bg": "#5ba0e0",
+
+        "table-header-bg": "#e8e8e8",
+        "table-header-fg": "#383a42",
+        "compact-bg": "#f5f5f5",
+
+        "hex-bg": "#f0f0f0",
+        "hex-input-bg": "#f0f0f0",
+        "hex-input-focus-bg": "#ffffff",
+        "hex-input-fg": "#383a42",
+        "hex-bar-border": "#2a3142",
+        "hex-caret-fg": "#9aa7b8",
+        "hex-ascii-dot-fg": "#787878",
+
+        "cursor-block-bg": "#dde4ee",
+        "cursor-block-fg": "#0b0c12",
+        "cursor-inactive-fg": "#9aa7b8"
+      }
+    }
+  }
+}

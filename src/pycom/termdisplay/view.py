@@ -12,6 +12,7 @@ from textual.events import MouseScrollDown, MouseScrollUp
 from textual.widgets import Static
 
 from pycom.termdisplay.vt import Char, TerminalModel
+from pycom.theme import widget_colour
 
 _HEX_RE = re.compile(r"^[0-9a-fA-F]{6}$")
 _ANSI_BASE = {
@@ -106,20 +107,29 @@ def render_row(chars: list[Char]) -> Text:
 # Cursor visuals ----------------------------------------------------------------
 # The terminal shows an always-on cursor: a *filled block* while it is the
 # active typing target, and a *vertical bar* once focus moves elsewhere.
-_CURSOR_BLOCK_BG = Color.parse("#dde4ee")  # filled block background (active)
-_CURSOR_BLOCK_FG = Color.parse("#0b0c12")  # glyph carved inside the block
-_CURSOR_INACTIVE_FG = Color.parse("#9aa7b8")  # bar colour (inactive)
+# Colours come from the active theme (``cursor-*`` variables) so a bare
+# 8/16-colour theme can pick exact ANSI colours; these are the dark-theme
+# fallbacks used before the widget is mounted.
+_CURSOR_BLOCK_BG = "#dde4ee"  # filled block background (active)
+_CURSOR_BLOCK_FG = "#0b0c12"  # glyph carved inside the block
+_CURSOR_INACTIVE_FG = "#9aa7b8"  # bar colour (inactive)
 _BAR_CURSOR = "\u2502"  # vertical bar shown when the view is inactive
 
 
-def _cursor_cell(under: str, active: bool) -> Text:
+def _cursor_cell(under: str, active: bool, widget: Static) -> Text:
     """Build the single cell shown at the cursor position."""
     if active:
         return Text(
             (under or " "),
-            style=Style(color=_CURSOR_BLOCK_FG, bgcolor=_CURSOR_BLOCK_BG),
+            style=Style(
+                color=widget_colour(widget, "cursor-block-fg", _CURSOR_BLOCK_FG),
+                bgcolor=widget_colour(widget, "cursor-block-bg", _CURSOR_BLOCK_BG),
+            ),
         )
-    return Text(_BAR_CURSOR, style=Style(color=_CURSOR_INACTIVE_FG))
+    return Text(
+        _BAR_CURSOR,
+        style=Style(color=widget_colour(widget, "cursor-inactive-fg", _CURSOR_INACTIVE_FG)),
+    )
 
 
 def _overlay_at(row: Text, col: int, cell: Text) -> Text:
@@ -175,13 +185,11 @@ class TerminalView(Static):
     # -- external API ------------------------------------------------------------------
     def mark_dirty(self) -> None:
         """Ask Textual to repaint this view; :meth:`render` rebuilds the content
-        straight from the model on the next paint.
+        from the model on the next paint.
 
-        (Do NOT pump content through ``Static.update`` here: pushing a cached
-        multi-line visual from a background timer races Textual's layout/paint
-        cycle and the new content is frequently never composited.  A plain
-        ``refresh()`` lets Textual call ``render()`` on its own schedule and is
-        coalesced to at most one repaint per frame.)"""
+        Use ``refresh()`` rather than ``Static.update`` from a background
+        timer: a pushed visual races Textual's layout/paint cycle, while
+        ``refresh()`` is coalesced to one repaint per frame."""
         self.refresh()
 
     def scroll_to_bottom(self) -> None:
@@ -265,7 +273,7 @@ class TerminalView(Static):
             # pyte leaves blank lines out of its buffer, so a row may be empty
             under = row_chars[cursor_col].data if cursor_col < len(row_chars) else " "
             rows[cursor_disp] = _overlay_at(
-                rows[cursor_disp], cursor_col, _cursor_cell(under, self._active)
+                rows[cursor_disp], cursor_col, _cursor_cell(under, self._active, self)
             )
 
         block = Text()
@@ -287,7 +295,7 @@ class HexAsciiPane(Static):
     stay in sync.
     """
 
-    GRAY = Style(color="#787878")
+    GRAY = "#787878"  # fallback for non-printable bytes (see ``hex-ascii-dot-fg``)
 
     def __init__(self, term_view: TerminalView, id: str | None = None) -> None:
         super().__init__("", id=id)
@@ -305,6 +313,7 @@ class HexAsciiPane(Static):
         line = "".join(c.data for c in chars).rstrip()
         tokens = line.split()
         out = Text()
+        dot_style = Style(color=widget_colour(self, "hex-ascii-dot-fg", self.GRAY))
         for tok in tokens:
             if len(tok) != 2 or any(c not in "0123456789abcdefABCDEF" for c in tok):
                 return Text("")  # not a clean hex line -> leave the row blank
@@ -312,7 +321,7 @@ class HexAsciiPane(Static):
             if 0x20 <= b <= 0x7E:
                 out.append(chr(b))
             else:
-                out.append(".", style=self.GRAY)
+                out.append(".", style=dot_style)
         return out
 
     def on_mouse_scroll_up(self, event: MouseScrollUp) -> None:

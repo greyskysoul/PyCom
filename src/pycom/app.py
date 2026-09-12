@@ -15,16 +15,17 @@ from copy import deepcopy
 from importlib import resources as _resources
 from typing import Any, ClassVar
 
+from rich.color import Color
 from rich.style import Style
 from rich.text import Text as RichText
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
 from textual.containers import Container, Horizontal, Vertical
 from textual.events import Event, Key, Paste
-from textual.theme import Theme
 from textual.widgets import Button, TextArea
 
 from pycom import APP_NAME, __version__
+from pycom import theme as thememod
 from pycom.compat import set_ascii_ui
 from pycom.config import AppConfig, ConnectionSettings, load_config, save_config
 from pycom.i18n import detect_system_language, get_language, set_language, tr
@@ -46,6 +47,7 @@ from pycom.screens.transfermenu import TransferMenuScreen
 from pycom.serialio import SerialManager
 from pycom.termdisplay.view import HexAsciiPane, StatusBar, TerminalView
 from pycom.termdisplay.vt import TerminalModel
+from pycom.theme import widget_colour
 from pycom.xfer.ymodem import YModemEngine
 from pycom.xfer.zmodem import ZModemEngine
 
@@ -53,7 +55,9 @@ _HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
 
 # Vertical-bar cursor shown in the 16-hex editor while it is not focused.
 _HEX_BAR = "\u2502"
-_HEX_BAR_STYLE = Style(color="#9aa7b8")
+# Fallback caret colour (used until the theme variables are available; the
+# real value comes from the active theme's ``hex-caret-fg``).
+_HEX_BAR_FG = "#9aa7b8"
 
 # HEX 模式每行最多显示的字节数（接收区 / 发送框共用同一套档位：32/16/8/4）。
 _HEX_MAX_BYTES_PER_LINE = 32
@@ -174,19 +178,14 @@ class _HexArea(TextArea):
         self.cursor_blink = False  # 常亮的块状光标，不闪烁
 
     def action_send_hex(self) -> None:
-        """回车直接发送：解析输入框内容并发送到串口。
-
-        输入框为空时静默忽略：回车同时也是“按任意键关闭 toast 提示”的按键，
-        再弹一个“请先输入字节”的提示框会让人以为提示框关不掉。
-        """
+        """回车直接发送；空输入静默忽略（回车也是“关闭 toast”的按键）。"""
         self.app._send_hex_box(report_empty=False)  # type: ignore[attr-defined]
 
     def on_text_area_changed(self, _event: TextArea.Changed) -> None:
         self._reflow(keep_cursor=True)
 
     def on_resize(self) -> None:
-        """宽度变化后按新宽度重新分组换行（与接收区同一套 32/16/8/4 档位），
-        并保持光标所在的字节位置，不把光标甩到末尾。"""
+        """宽度变化后按新宽度重新分组换行，并保持光标所在的字节位置。"""
         if self.text:
             self._reflow(keep_cursor=True)
 
@@ -205,17 +204,18 @@ class _HexArea(TextArea):
         row, col = self.cursor_location
         if row != line_index:
             return line
-        bar = RichText(_HEX_BAR, style=_HEX_BAR_STYLE)
+        bar = RichText(_HEX_BAR, style=Style(color=self._caret_color()))
         if col >= len(line):
             return RichText.assemble(line, bar)
         return RichText.assemble(line[:col], bar, line[col + 1 :])
 
-    def _reflow(self, keep_cursor: bool) -> None:
-        """Rebuild the document in canonical form: only hex, spaced per byte.
+    def _caret_color(self) -> Color:
+        """Caret colour from the active theme (``hex-caret-fg``)."""
+        return widget_colour(self, "hex-caret-fg", _HEX_BAR_FG)
 
-        每行字节数按输入框自身的宽度取（与接收区同一套 32/16/8/4 档位），
-        因此窗口变宽/变窄时输入内容会自动重新换行。
-        """
+    def _reflow(self, keep_cursor: bool) -> None:
+        """Rebuild the document in canonical form: only hex, spaced per byte,
+        wrapped at the input box's own width (32/16/8/4 bytes per line)."""
         if self._reformatting:
             return
         raw = self.text or ""
@@ -246,11 +246,8 @@ class _HexArea(TextArea):
 
 
 class _HexBar(Vertical):
-    """Bottom 16-hex input bar; mounted only while HEX mode is on.
-
-    Keeping it out of the DOM when HEX is off prevents hidden focusable widgets
-    from stealing focus (which used to break Ctrl+A and other combos).
-    """
+    """Bottom 16-hex input bar; mounted only while HEX mode is on, so hidden
+    focusable widgets never steal focus from the terminal."""
 
     def compose(self) -> ComposeResult:
         yield _HexArea(id="hex-input")
@@ -258,11 +255,10 @@ class _HexBar(Vertical):
 
 
 class _StatusMenuButton(Button, can_focus=False):
-    """Bottom-right "菜单" button on the main window.
+    """Bottom-left "菜单" button (mouse-only, equivalent to Ctrl+A Z).
 
-    Equivalent to Ctrl+A Z.  ``can_focus`` is disabled so it never steals the
-    keyboard focus: typed keys keep going straight to the serial port and the
-    Ctrl+A prefix handling is unaffected — the button is mouse-click only.
+    ``can_focus`` is disabled so typed keys keep going to the serial port and
+    the Ctrl+A prefix handling is unaffected.
     """
 
 
@@ -290,174 +286,6 @@ def _load_css() -> str:
 
 
 CSS_CONTENT = _load_css()
-
-
-# --- colour themes -----------------------------------------------------------
-# Custom CSS variables referenced by app.tcss.  The dark values are the
-# historical palette; the light theme overrides them per-theme (see
-# _build_themes).  They are provided through get_theme_variable_defaults()
-# (fallback) and each Theme.variables (per-theme override).
-_DARK_VARIABLES: dict[str, str] = {
-    "term-bg": "#282c34",
-    "term-fg": "#dcdfe4",
-    "hex-bg": "#313640",
-    "hex-input-bg": "#282c34",
-    "hex-input-focus-bg": "#313640",
-    "hex-input-fg": "#dcdfe4",
-    "muted": "#5c6370",
-    "control-bg": "#3a4048",
-    "control-focus-bg": "#474e5d",
-    "control-fg": "#dcdfe4",
-    "button-bg": "#3a4048",
-    "hover-bg": "#4a5260",
-    "placeholder": "#5c6370",
-    "label": "#919baa",
-    "faint": "#5c6370",
-    "border": "#474e5d",
-    "highlight-bg": "#474e5d",
-    "highlight-fg": "#dcdfe4",
-    "error": "#e06c75",
-    "accent": "#61afef",
-    "checkbox-fg": "#dcdfe4",
-    "toggle-off": "#5c6370",
-    "compact-bg": "#282c34",
-    "menu-btn-bg": "#3b82f6",
-    "menu-btn-fg": "#ffffff",
-    "menu-btn-hover-bg": "#4a90e0",
-    "primary-btn-bg": "#3b82f6",
-    "primary-btn-fg": "#ffffff",
-    "primary-btn-hover-bg": "#4a90e0",
-    "table-header-bg": "#3a4048",
-    "table-header-fg": "#dcdfe4",
-}
-
-_LIGHT_VARIABLES: dict[str, str] = {
-    "term-bg": "#fafafa",
-    "term-fg": "#383a42",
-    "hex-bg": "#f0f0f0",
-    "hex-input-bg": "#ffffff",
-    "hex-input-focus-bg": "#f0f0f0",
-    "hex-input-fg": "#383a42",
-    "muted": "#a0a1a7",
-    "control-bg": "#ffffff",
-    "control-focus-bg": "#f0f0f0",
-    "control-fg": "#383a42",
-    "button-bg": "#ffffff",
-    "hover-bg": "#f0f0f0",
-    "placeholder": "#a0a1a7",
-    "label": "#a0a1a7",
-    "faint": "#a0a1a7",
-    "border": "#d4d4d4",
-    "highlight-bg": "#e0e0e0",
-    "highlight-fg": "#383a42",
-    "error": "#e45649",
-    "accent": "#0184bc",
-    "checkbox-fg": "#383a42",
-    "toggle-off": "#a0a1a7",
-    "compact-bg": "#f5f5f5",
-    "menu-btn-bg": "#4a90d9",
-    "menu-btn-fg": "#ffffff",
-    "menu-btn-hover-bg": "#5ba0e0",
-    "primary-btn-bg": "#4a90d9",
-    "primary-btn-fg": "#ffffff",
-    "primary-btn-hover-bg": "#5ba0e0",
-    "table-header-bg": "#e8e8e8",
-    "table-header-fg": "#383a42",
-}
-
-# Compat theme for bare Linux consoles (8/16 colours).  Uses only *base* ANSI
-# colours (0-7), never the bright variants (8-15): the Linux console only
-# implements the base 8 background colours, so a bright-black field fill would
-# emit SGR 100 and be silently ignored (i.e. fields look background-less).
-_COMPAT_VARIABLES: dict[str, str] = {
-    "ansi-background": "ansi_black",
-    "ansi-foreground": "ansi_white",
-    "term-bg": "ansi_black",
-    "term-fg": "ansi_default",
-    "hex-bg": "ansi_black",
-    "hex-input-bg": "ansi_black",
-    "hex-input-focus-bg": "ansi_black",
-    "hex-input-fg": "ansi_default",
-    "muted": "ansi_white",
-    "control-bg": "ansi_blue",
-    "control-focus-bg": "ansi_cyan",
-    "control-fg": "ansi_white",
-    "button-bg": "ansi_blue",
-    "hover-bg": "ansi_cyan",
-    "placeholder": "ansi_white",
-    "label": "ansi_white",
-    "faint": "ansi_cyan",
-    "border": "ansi_cyan",
-    "highlight-bg": "ansi_cyan",
-    "highlight-fg": "ansi_black",
-    "error": "ansi_red",
-    "accent": "ansi_cyan",
-    "checkbox-fg": "ansi_white",
-    "toggle-off": "ansi_white",
-    "compact-bg": "ansi_black",
-    "menu-btn-bg": "ansi_blue",
-    "menu-btn-fg": "ansi_white",
-    "menu-btn-hover-bg": "ansi_cyan",
-    "primary-btn-bg": "ansi_blue",
-    "primary-btn-fg": "ansi_white",
-    "primary-btn-hover-bg": "ansi_cyan",
-    "table-header-bg": "ansi_blue",
-    "table-header-fg": "ansi_white",
-}
-
-
-def _build_themes() -> dict[str, Theme]:
-    """The two PyCom colour themes (dark = the historical palette)."""
-    return {
-        "pycom-dark": Theme(
-            name="pycom-dark",
-            primary="#61afef",
-            secondary="#56b6c2",
-            accent="#e5c07b",
-            warning="#e5c07b",
-            error="#e06c75",
-            success="#98c379",
-            foreground="#dcdfe4",
-            background="#282c34",
-            surface="#313640",
-            panel="#313640",
-            dark=True,
-            variables=dict(_DARK_VARIABLES),
-        ),
-        "pycom-light": Theme(
-            name="pycom-light",
-            primary="#0184bc",
-            secondary="#0997b3",
-            accent="#c18401",
-            warning="#c18401",
-            error="#e45649",
-            success="#50a14f",
-            foreground="#383a42",
-            background="#fafafa",
-            surface="#f5f5f5",
-            panel="#e8e8e8",
-            dark=False,
-            variables=dict(_LIGHT_VARIABLES),
-        ),
-        # 仅用于兼容模式（Linux 控制台/16 色）：基于 ANSI 命名色，避免真彩 hex
-        # 降级后互相撞色；不参与普通主题切换。
-        "pycom-compat": Theme(
-            name="pycom-compat",
-            primary="ansi_cyan",
-            secondary="ansi_blue",
-            accent="ansi_cyan",
-            warning="ansi_yellow",
-            error="ansi_red",
-            success="ansi_green",
-            foreground="ansi_white",
-            background="ansi_black",
-            surface="ansi_black",
-            panel="ansi_black",
-            dark=True,
-            ansi=True,
-            variables=dict(_COMPAT_VARIABLES),
-        ),
-    }
 
 
 def _env_dark() -> bool | None:
@@ -690,11 +518,9 @@ class PyComApp(App):
         Binding("ctrl+c", "noop", show=False, system=True),
     ]
 
-    # 应用内选中（Textual 自带）+ Ctrl+Shift+C/V 快捷键复制粘贴。
-    # 注意：本应用必须向终端上报鼠标（滚动/按钮），而终端一旦处于鼠标上报
-    # 状态就会关闭自身的原生选中；因此普通拖拽产生的是 Textual 的“应用内”
-    # 选中，复制用 Ctrl+Shift+C。在 Windows Terminal 中要原生选中需按住
-    # Shift 拖拽，再用终端自己的 Ctrl+Shift+C / 右键复制。
+    # 应用内选中 + Ctrl+Shift+C/V 复制粘贴：鼠标上报开启后宿主终端关闭了
+    # 原生选中，普通拖拽只能生成 Textual 的“应用内”选中（原生选中需按住
+    # Shift 拖拽）。
     ALLOW_SELECT: ClassVar[bool] = True
 
     def __init__(
@@ -712,8 +538,10 @@ class PyComApp(App):
         super().__init__()
         self.cfg = cfg or AppConfig()
         self.compat = compat
-        # register the colour themes and apply the configured one
-        for _name, _theme in _build_themes().items():
+        # register the colour themes (bundled + user theme files) and apply the
+        # configured one
+        self._themes = thememod.load_themes()
+        for _theme in self._themes.values():
             self.register_theme(_theme)
         self._detected_dark = detected_dark
         self.theme = self._resolve_theme(detected_dark)
@@ -902,10 +730,7 @@ class PyComApp(App):
     def open_serial(self, settings: ConnectionSettings) -> str | None:
         if self._xfer_thread is not None and self._xfer_thread.is_alive():
             return tr("请先完成/取消进行中的文件传输")
-        # 离开虚拟回环模式：一旦要打开真实串口，发送必须走该端口而不是回环。
-        # 与 open_loopback()（关闭真实串口并把 _loopback 置 True）保持对称，
-        # 否则 LOOPBACK → 真实串口 切换后 _loopback 仍为 True，发送会被回环
-        # 截走、状态栏也一直显示“虚拟回环”，看起来就像“切换不成功”。
+        # 打开真实串口前必须退出回环模式，否则发送仍会被回环截走。
         self._loopback = False
         err = self.serial.open(settings)
         if err is None:
@@ -937,10 +762,10 @@ class PyComApp(App):
         return f"\r\n{tr('已连接 {name}', name=name)}\r\n"
 
     def _print_local_hint(self, text: str) -> None:
-        """排队一条本地提示（橙/粗体），等布局稳定后统一打印。
+        """排队一条本地提示（橙/粗体），布局稳定后统一打印。
 
-        本地提示不计入 TX/RX、不写入捕获文件；HEX 模式下不打印。延迟一小
-        帧再刷出，避免启动阶段的首次布局/缩放把刚写入的提示清掉。
+        不计入 TX/RX、不写入捕获；HEX 模式下不打印。延迟一小帧再刷出，
+        避免启动阶段的首次布局把刚写入的提示清掉。
         """
         if self.cfg.hex_mode:
             return
@@ -991,10 +816,8 @@ class PyComApp(App):
         return self.query_one("#hex-bar", Vertical)
 
     def _sync_hex_ui(self) -> None:
-        """Mount the hex input row + ASCII pane only while HEX mode is on;
-        remove them when off.
-        (A permanently hidden focusable row used to steal focus and break
-        Ctrl+A / other combos in the normal mode.)"""
+        """Mount the hex input row + ASCII pane while HEX mode is on; remove
+        them when off (a hidden focusable row would steal focus in normal mode)."""
         present = len(self.query("#hex-bar")) > 0
         if self.cfg.hex_mode:
             if not present:
@@ -1029,9 +852,8 @@ class PyComApp(App):
     def _send_hex_box(self, report_empty: bool = True) -> None:
         """Parse the 16-hex input and transmit it.
 
-        ``report_empty``: 输入框为空时是否弹出“请先输入字节”的提示。点击“发送”
-        按钮属于明确的发送意图，会给提示；在输入框里按回车则静默忽略（见
-        ``_HexArea.action_send_hex``）。
+        ``report_empty``: 空输入时是否提示。点“发送”按钮会提示，输入框里
+        按回车则静默忽略（见 ``_HexArea.action_send_hex``）。
         """
         field = self.query_one("#hex-input", TextArea)
         raw = field.text.strip()
@@ -1113,9 +935,9 @@ class PyComApp(App):
         self._refresh_hex_pane()
 
     def _remember_hex_rx(self, data: bytes) -> None:
-        """累加 HEX 模式下收到的原始字节（只保留尾部固定上限）。
+        """累加 HEX 模式收到的原始字节（只保留尾部固定上限）。
 
-        宽度变化时要用它整体重排，所以不能无限增长；上限按滚动历史容量估算
+        宽度变化时要据此整体重排，因此上限按滚动历史容量估算
         （历史行数 × 每行最多 32 字节），多余的旧字节丢弃。
         """
         if not data:
@@ -1128,10 +950,9 @@ class PyComApp(App):
     def _hex_rx_per_line(self) -> int:
         """接收区每行多少字节，随终端宽度自适应（32/16/8/4）。
 
-        HEX 模式下同一行除了 hex 文本（``3n-1`` 列）还有右侧 ASCII 分栏
-        （``n`` 个字符 + 1 列分隔边框），所以按整个终端区的宽度算：``4n`` 能放下
-        的最大档位。用终端区（而不是 hex 文本区）的宽度可以避免“分栏变宽 ->
-        文本区变窄 -> 每行字节数变化”的反馈环。
+        一行含 hex 文本（``3n-1`` 列）+ ASCII 分栏（``n`` 字符 + 1 列边框），
+        故按整个终端区的宽度取 ``4n`` 能放下的最大档位。必须用终端区而非
+        hex 文本区的宽度，否则会形成“分栏↔文本区”宽度的反馈环。
         """
         return hex_bytes_per_line(
             self._hex_area_width(), max_bytes=_HEX_MAX_BYTES_PER_LINE, ascii_pane=True
@@ -1163,11 +984,10 @@ class PyComApp(App):
             self._reflow_hex_rx()
 
     def _reflow_hex_rx(self) -> None:
-        """窗口宽度变化后，按新的每行字节数重排整个 HEX 接收区。
+        """按新的每行字节数重排整个 HEX 接收区。
 
-        pyte 变窄时会裁掉超出新宽度的字符，变宽后又无法还原（一行里被“挤
-        出去”的字节永久消失）。这里保留 HEX 模式下的原始字节，一旦每行字
-        节数发生变化就清空模型、按新宽度从头重排，字节一个不少。
+        pyte 变窄时会裁掉超宽字符且变宽后无法还原，因此保留原始字节，
+        每行字节数变化时清空模型、按新宽度从头重排。
         """
         if not self.cfg.hex_mode or not self._hex_raw:
             return
@@ -1186,11 +1006,9 @@ class PyComApp(App):
     def _format_hex_rx(self, data: bytes) -> str:
         """把一段接收数据排版为“每行 N 字节”的纯十六进制文本。
 
-        发送区(输入框)之所以能连续按宽度换行，是因为它每次把整篇文本重排；
-        而接收数据是分块到达的，若只在单个块内分组，小于 N 字节的小块会一直
-        堆在同一行、长时间不换行。这里用 ``self._hex_row_bytes`` 跨数据块持续
-        计数，无论块多大都严格在每满 N 字节处换行，从而与发送区一致地连续
-        自动换行。文本用 ``\\r\\n`` 换行，保证每行回到列首。
+        接收数据分块到达，只在单块内分组会让小块一直堆在同一行；用
+        ``self._hex_row_bytes`` 跨块计数，每满 N 字节换行。用 ``\\r\\n``
+        保证每行回到列首。
         """
         if not data:
             return ""
@@ -1220,15 +1038,12 @@ class PyComApp(App):
     async def on_event(self, event: Event) -> None:
         """任意键按下即关闭左下角的 toast 提示（未连接端口 / HEX 模式等）。
 
-        必须在这里处理，而不能放在 ``_on_key`` 里：HEX 模式下焦点在 16 进制
-        输入框（``TextArea``），它会 ``event.stop()`` 掉按键（回车还带
-        ``priority`` 绑定），事件根本不冒泡到 ``_on_key``，提示框因此永远关不掉。
-        ``on_event`` 在按键被转发给焦点控件之前统一处理，任何模式下都生效；
-        关闭提示的同时按键照常执行（不吞键），避免丢掉输入的字节/十六进制位。
+        放在这里而不是 ``_on_key``：HEX 模式下焦点在 ``TextArea``，它会
+        ``event.stop()`` 掉按键，事件到不了 ``_on_key``。这里在按键转发给
+        焦点控件之前处理，任何模式都生效，且不吞键。
 
-        ``is_forwarded`` 的守卫必不可少：按键处理完后（未 stop）会带着
-        ``is_forwarded`` 再回到这里一次，若那时再清一次就会把该按键刚刚产生的
-        新提示（例如 Ctrl+A H 的“HEX 模式已开启”）一起清掉。
+        ``is_forwarded`` 守卫：按键未 stop 时会带 ``is_forwarded`` 再回到
+        这里一次，那时再清会把该按键刚产生的新提示一起清掉。
         """
         if isinstance(event, Key) and not event.is_forwarded and self._notifications:
             self.clear_notifications()
@@ -1288,13 +1103,7 @@ class PyComApp(App):
 
     # -- 复制 / 粘贴 ----------------------------------------------------------------
     def _copy_selection(self) -> None:
-        """复制终端中选中的文本到剪贴板（Ctrl+Shift+C）。
-
-        选中的是 Textual 的“应用内”选中：宿主终端在鼠标上报期间关闭了原生
-        选中，普通拖拽只能生成应用内高亮；复制统一走这里的快捷键。在 Windows
-        Terminal 中 Ctrl+Shift+C 被终端截走，需按住 Shift 拖拽原生选中后用
-        终端的复制。
-        """
+        """复制终端中选中的文本到剪贴板（Ctrl+Shift+C，应用内选中）。"""
         text = self.screen.get_selected_text()
         if text:
             self.copy_to_clipboard(text)
@@ -1455,11 +1264,7 @@ class PyComApp(App):
             self.query_one("#hex-input", TextArea).focus()
 
     def clear_terminal(self) -> None:
-        """清屏：同时复位 TX/RX 字节计数器与 HEX 行内计数，并刷新状态栏。
-
-        清屏代表显示区域重新开始，状态栏里的收发计数也随之从 0 累计，
-        便于按“屏/页”衡量一次会话的数据量。
-        """
+        """清屏：同时复位 TX/RX 计数与 HEX 行内计数。"""
         self.model.clear()
         self._tx = 0
         self._rx = 0
@@ -1483,34 +1288,35 @@ class PyComApp(App):
     # ============================================================================ theme
     def get_theme_variable_defaults(self) -> dict[str, str]:
         """Fallback values for the custom CSS variables (dark palette)."""
-        return dict(_DARK_VARIABLES)
+        return thememod.default_variables()
 
-    def set_theme_mode(self, mode: str) -> None:
-        """Switch the colour theme mode now and persist it.
+    def set_theme(self, theme: str, mode: str | None = None) -> None:
+        """Switch the colour theme/appearance now and persist it.
 
-        ``mode`` is one of "auto" | "light" | "dark"; "auto" follows the
-        terminal's detected background colour.
+        ``theme`` is ``"auto"`` (= the bundled default theme) or the name of a
+        theme from a theme file; ``mode`` is ``"auto"`` (follow the terminal
+        background), ``"dark"`` or ``"light"``.  Unknown values fall back to
+        the default theme / auto appearance.
         """
-        if mode not in ("auto", "light", "dark"):
-            return
-        self.cfg.theme = mode
+        wanted = self.cfg.theme_mode if mode is None else mode
+        name, variant = thememod.split_selection(theme, wanted, self._themes)
+        self.cfg.theme = name
+        self.cfg.theme_mode = variant
         save_config(self.cfg)
         self._apply_theme()
+
+    def set_theme_mode(self, mode: str) -> None:
+        """Keep the current theme and only change the appearance mode."""
+        self.set_theme(self.cfg.theme, mode)
 
     def _apply_theme(self) -> None:
         self.theme = self._resolve_theme(self._detected_dark)
 
     def _resolve_theme(self, detected_dark: bool | None) -> str:
-        """Map the configured theme mode to a registered theme name."""
+        """Registered theme name for the configured theme + appearance mode."""
         if self.compat:
-            return "pycom-compat"  # 16 色终端专用，忽略普通主题设置
-        mode = self.cfg.theme
-        if mode == "light":
-            return "pycom-light"
-        if mode == "dark":
-            return "pycom-dark"
-        # auto: follow the terminal (unknown -> dark, the historical default)
-        return "pycom-dark" if detected_dark is not False else "pycom-light"
+            return thememod.COMPAT_THEME  # 16 色终端专用，忽略普通主题设置
+        return thememod.resolve(self.cfg.theme, self.cfg.theme_mode, detected_dark, self._themes)
 
     # ============================================================================ status
     def _status_text(self) -> str:
@@ -1535,7 +1341,6 @@ class PyComApp(App):
         elif self.cfg.hex_mode:
             right = tr("HEX：底部输入，点发送")
         else:
-            # Ctrl+A Z 提示已改为右下角的“菜单”按钮，状态栏不再重复显示
             right = ""
         mid = "  ".join(flags)
         return f" {conn} | {state} | {mid}".rstrip(" |") + (f"    {right}" if right else "")
@@ -2000,9 +1805,12 @@ def main(argv=None) -> int:
         sys.stderr.write(_too_small_message(cols, rows))
         return 1
 
-    # auto theme: query the terminal background (fall back to dark).
+    # auto appearance: query the terminal background (fall back to dark).
     # 兼容模式下终端不响应 OSC 11，跳过查询以免把转义序列打到控制台上。
-    detected_dark = detect_terminal_dark() if (cfg.theme == "auto" and not compat) else None
+    auto_appearance = thememod.split_selection(cfg.theme, cfg.theme_mode)[1]
+    detected_dark = (
+        detect_terminal_dark() if (auto_appearance == thememod.MODE_AUTO and not compat) else None
+    )
 
     app = PyComApp(
         cfg=cfg,
