@@ -153,8 +153,15 @@ pycom --bare -p COM3 -b 115200
 ## Development
 
 ```bash
-python tools/check.py   # ruff / format / mypy / unit tests (same entry point as CI)
+python tools/check.py   # same entry point as CI (see below)
 ```
+
+It runs `ruff check` / `ruff format --check` / `mypy` / `pytest`, and then the
+packaging checks that mirror the CI build job: the version in `pyproject.toml`
+must match `pycom.__version__`, and the wheel must build and ship every runtime
+resource (`app.tcss`, the bundled themes) — a wheel that is missing one of them
+installs cleanly but the app cannot start. Pass `--skip-build` to skip that last
+step while iterating.
 
 ## Packaging
 

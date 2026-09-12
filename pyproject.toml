@@ -53,6 +53,9 @@ dev = [
     "ruff>=0.5",
     "mypy>=1.10,<1.19",
     "pyinstaller>=6",
+    # tools/check.py builds the wheel to verify packaging (mirrors the CI build job)
+    "build>=1.2",
+    "hatchling",
 ]
 # 测试专用：用于与 lrzsz 交互验证（Linux）
 interop = ["pytest-timeout>=2"]
@@ -62,10 +65,6 @@ pycom = "pycom.app:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pycom"]
-
-[tool.hatch.build.targets.wheel.force-include]
-"src/pycom/resources/app.tcss" = "pycom/resources/app.tcss"
-"src/pycom/resources/themes" = "pycom/resources/themes"
 
 [tool.hatch.build.targets.sdist]
 include = ["src/pycom", "packaging", "tests"]

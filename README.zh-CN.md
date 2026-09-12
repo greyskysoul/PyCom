@@ -146,10 +146,13 @@ pycom --bare -p COM3 -b 115200
 ## 开发
 
 ```bash
-python tools/check.py   # 提交前检查：ruff / 格式 / mypy / 单元测试
+python tools/check.py   # 提交前检查（与 CI 同一入口，见下）
 ```
 
-该命令与 CI 测试 job 使用相同的检查入口；所有检查通过后再提交。
+依次执行 `ruff check` / `ruff format --check` / `mypy` / `pytest`，以及对应 CI
+构建 job 的打包校验：`pyproject.toml` 的版本必须与 `pycom.__version__` 一致，
+wheel 必须能构建且包含全部运行时资源（`app.tcss` 与内置主题）——缺资源时 wheel
+能正常安装但程序无法启动。开发中可用 `--skip-build` 跳过打包校验。
 
 结构：`src/pycom/`（`serialio.py` 串口、`termdisplay/` 终端渲染、`xfer/ymodem.py`
 协议引擎、`screens/` 各界面、`keys.py` 按键状态机、`app.py` 主程序）。
